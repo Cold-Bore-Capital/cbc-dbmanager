@@ -7,7 +7,7 @@ LONG_DESCRIPTION = 'A python package to assist with connecting to Redshift via a
 # Setting up
 setup(
     # Name of the folder containing module.
-    name="cbcdbmanager",
+    name="cbcdb",
     version=VERSION,
     author="CBC IT Group",
     author_email="it-group@coldborecapital.com",

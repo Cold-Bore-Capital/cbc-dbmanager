@@ -1,12 +1,13 @@
 from unittest import TestCase
 import pandas as pd
-import psycopg2
-from app.main import DBManager
+# import psycopg2
+from cbcdb.main import DBManager
 
 
 class TestDBManager(TestCase):
 
-    def _get_db_inst(self):
+    @staticmethod
+    def _get_db_inst():
         db = DBManager(
             debug_output_mode=True,
             use_ssh=False,
