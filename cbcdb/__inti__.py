@@ -1,1 +1,1 @@
-from cbcdb.main import DBManager
+from cbcdb.main import DBManager as dbmanager

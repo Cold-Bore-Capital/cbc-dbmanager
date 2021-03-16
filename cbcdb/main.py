@@ -6,6 +6,7 @@ import sshtunnel
 import pandas as pd
 from numpy import inf
 
+
 from cbcdb.configuration_service import ConfigurationService as Config
 
 
@@ -33,6 +34,7 @@ class DBManager:
                  db_schema=None,
                  db_host=None):
         """
+        Init Function
 
         Args:
             debug_output_mode: Flag to turn on debug mode. Setting this to True will print debug messages.
