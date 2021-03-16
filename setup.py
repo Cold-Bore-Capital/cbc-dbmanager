@@ -1,6 +1,9 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
-    #name='cbcdb',
+    name='cbcdb',
     # packages=['cbcdb', 'cbcdb.main']
+    packages=find_packages(
+        where='cbcdb'
+    ),
 )
