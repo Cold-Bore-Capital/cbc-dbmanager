@@ -202,14 +202,13 @@ class DBManager:
         with conn:
             with conn.cursor() as curs:
                 try:
-                    csr = conn.cursor()
                     if params:
-                        csr.execute(sql, params)
+                        curs.execute(sql, params)
                     else:
-                        csr.execute(sql)
+                        curs.execute(sql)
                     output = []
-                    columns = [column[0] for column in csr.description]
-                    for row in csr.fetchall():
+                    columns = [column[0] for column in curs.description]
+                    for row in curs.fetchall():
                         output.append(dict(zip(columns, row)))
                 except Exception as e:
                     self._safe_tunnel_close()
