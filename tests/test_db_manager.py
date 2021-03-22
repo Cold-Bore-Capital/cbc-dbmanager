@@ -77,6 +77,8 @@ class TestDBManager(TestCase):
         test = res.iloc[0]['color_name']
         self.assertEqual(golden, test)
 
+        # @todo test with params.
+
     def test__get_sql_list_dicts(self):
         db = self._get_db_inst()
         table_name = self._make_some_data(db)
@@ -127,7 +129,8 @@ class TestDBManager(TestCase):
         res = db.get_sql_single_item_list(f'select color_name from {table_name}')
 
         golden = 'grey'
-        self.assertEqual(golden, res[len(res)-1])
+        test = res[len(res)-1]
+        self.assertEqual(golden, test)
 
         # Test errors - Bad column name
         sql = 'insert into public.color (column_that_doesnt_exist) values %s;'
@@ -146,7 +149,6 @@ class TestDBManager(TestCase):
         except Exception as e:
             failed = True
         self.assertTrue(failed)
-
 
 
     def test__build_sql_from_dataframe(self):

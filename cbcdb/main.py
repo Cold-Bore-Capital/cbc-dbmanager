@@ -163,7 +163,7 @@ class DBManager:
             sql: SQL string
             params: List of parameters
 
-        Returns:
+        Returns: A Pandas Dataframe.
 
         """
         self._print_debug_output(f"Getting query:\n {sql}")
