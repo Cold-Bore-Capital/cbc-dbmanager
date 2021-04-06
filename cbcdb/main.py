@@ -265,7 +265,7 @@ class DBManager:
                     curs.execute(sql, params)
                     self._print_debug_output('csr.execute complete.')
                     conn.commit()
-                    self._print_debug_output('conn.commit complete. .')
+                    self._print_debug_output('conn.commit complete.')
                 except Exception as e:
                     self._safe_tunnel_close()
                     raise Exception(f'Database Execute Attempt Failed \n {e}')
