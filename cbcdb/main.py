@@ -150,8 +150,12 @@ class DBManager:
 
         if self.use_ssh:
             try:
-                self.tunnel.close()
-                self._print_debug_output('SSH Tunnel closed.')
+                if self.tunnel.is_active:
+                    self._print_debug_output('Starting Tunnel Close.')
+                    self.tunnel.stop()
+                    self._print_debug_output('SSH Tunnel closed.')
+                else:
+                    self._print_debug_output('Attempted to close tunnel but it was already inactive.')
             except Exception as e:
                 print('Failed to close SSH tunnel: \n {e}')
 
