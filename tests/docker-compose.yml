@@ -7,6 +7,7 @@ services:
             - .env
         ports:
             - "5434:5432"
+            - "2202:22"
         volumes:
             - "${LOCALDATABASE}:/var/lib/postgresql/data/pgdata"
         logging:

@@ -62,11 +62,11 @@ class TestDBManager(TestCase):
 
         return test_table_name
 
-    def test__get_connection(self):
-        db = self._get_db_inst()
-        conn = db._get_connection()
-        self.assertEqual(0, conn.closed)
-        # db._safe_tunnel_close(conn)
+    # def test__get_connection(self):
+    #     db = self._get_db_inst()
+    #     conn = db._get_connection()
+    #     self.assertEqual(0, conn.closed)
+    #     # db._safe_tunnel_close(conn)
 
     def test__get_sql_dataframe(self):
         db = self._get_db_inst()
