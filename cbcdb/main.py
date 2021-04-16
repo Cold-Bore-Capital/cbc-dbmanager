@@ -1,11 +1,11 @@
 import time
 from typing import List, Any, Dict, Tuple
-from psycopg2 import connect
-from psycopg2.extras import execute_values
-import sshtunnel
+
 import pandas as pd
 from numpy import inf
-
+from psycopg2 import connect
+from psycopg2.extras import execute_values
+from sshtunnel import open_tunnel
 
 from cbcdb.configuration_service import ConfigurationService as Config
 
@@ -66,21 +66,13 @@ class DBManager:
 
         self.use_ssh = use_ssh if use_ssh else self._config.use_ssh
         if self.use_ssh:
-            ssh_host = ssh_host if ssh_host else self._config.ssh_host
-            ssh_port = ssh_port if ssh_port else self._config.ssh_port
-            ssh_user = ssh_user if ssh_user else self._config.ssh_user
-            ssh_key_path = ssh_key_path if ssh_key_path else self._config.ssh_key_path
-            ssh_remote_bind_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.ssh_remote_bind_port
-            ssh_local_bind_address = ssh_local_bind_address if ssh_local_bind_address else self._config.ssh_local_bind_address
-            ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.ssh_local_bind_port
-
-        if self.use_ssh:
-            self.tunnel = sshtunnel.SSHTunnelForwarder(
-                (ssh_host, ssh_port),
-                ssh_username=ssh_user,
-                ssh_pkey=ssh_key_path,
-                remote_bind_address=(self._db_host, ssh_remote_bind_port),
-                local_bind_address=(ssh_local_bind_address, ssh_local_bind_port))
+            self.ssh_host = ssh_host if ssh_host else self._config.ssh_host
+            self.ssh_port = ssh_port if ssh_port else self._config.ssh_port
+            self.ssh_user = ssh_user if ssh_user else self._config.ssh_user
+            self.ssh_key_path = ssh_key_path if ssh_key_path else self._config.ssh_key_path
+            self.ssh_remote_bind_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.ssh_remote_bind_port
+            self.ssh_local_bind_address = ssh_local_bind_address if ssh_local_bind_address else self._config.ssh_local_bind_address
+            self.ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.ssh_local_bind_port
 
     def _print_debug_output(self, msg: str):
         """
@@ -94,134 +86,99 @@ class DBManager:
         if self._debug_mode:
             print(f'DEBUG: {msg}')
 
-    def _get_connection(self):
-        con = None
+    def _get_connection(self, sql, params, method_instance):
+        """
+        Creates a connection to the database
+        Args:
+            sql: The original SQL query.
+            params: The original params.
+            method_instance: An instance of the method requesting the database connection.
+
+        Returns: The results of the original method instance.
+        """
+        conn = None
         if self.use_ssh:
-            if not self.tunnel.is_active:
-                self._print_debug_output("Starting tunnel connection")
-                self.tunnel.start()
-                self._print_debug_output(f"Tunnel status {self.tunnel.check_tunnels()}")
-            host = self.tunnel.local_bind_host
-            port = self.tunnel.local_bind_port
+            with open_tunnel(
+                    (self.ssh_host, self.ssh_port),
+                    ssh_username=self.ssh_user,
+                    ssh_pkey=self.ssh_key_path,
+                    remote_bind_address=(self._db_host, self.ssh_remote_bind_port),
+                    local_bind_address=(self.ssh_local_bind_address, self.ssh_local_bind_port)) as tunnel:
+                host = tunnel.local_bind_host
+                port = tunnel.local_bind_port
+                return self._database_connection_sub_method(host, port, method_instance, sql, params)
+
         else:
             host = self._db_host
             port = self._db_port
+            return self._database_connection_sub_method(host, port, method_instance, sql, params)
 
-        try:
-            con = connect(dbname=self._db_name,
-                          host=host,
-                          port=port,
-                          user=self._db_user,
-                          password=self._db_password)
-            self._print_debug_output(f'Got database connection with status {con.status}')
-            return con
-        except ConnectionError as e:
-            print("ERROR: Encountered an error establishing connection")
-            if con:
-                con.rollback()
-                con.close()
-            self.tunnel.stop()
-            raise ConnectionError(e)
+    def _database_connection_sub_method(self, host, port, method_instance, sql, params):
+        with connect(dbname=self._db_name,
+                     host=host,
+                     port=port,
+                     user=self._db_user,
+                     password=self._db_password) as conn:
+            with conn.cursor() as curs:
+                return method_instance(sql, params, curs, conn)
 
-    def _safe_tunnel_close(self):
-        """
-        Safely shuts down the connection and tunnel in the event of a problem.
-
-        Args:
-            conn: A connection instance to the database.
-            csr: A cursor instance.
-            erro_mode: A flag indicating if this shutdown is due to an error. A rollback() will be called if True.
-
-        Returns: None
-
-        """
-        # if error_mode:
-        #     print("WARNING: Safe shutdown of DB connection and SSH tunnel initiated.")
-        # try:
-        #     if csr:
-        #         csr.close()
-        #         del csr
-        #     if error_mode:
-        #         conn.rollback()
-        #     conn.close()
-        #     self._print_debug_output("Connection closed.")
-        # except Exception as e:
-        #     print('Failed to close database connection: \n {e}')
-
-        if self.use_ssh:
-            try:
-                if self.tunnel.is_active:
-                    self._print_debug_output('Starting Tunnel Close.')
-                    self.tunnel.stop()
-                    self._print_debug_output('SSH Tunnel closed.')
-                else:
-                    self._print_debug_output('Attempted to close tunnel but it was already inactive.')
-            except Exception as e:
-                print('Failed to close SSH tunnel: \n {e}')
-
-    def get_sql_dataframe(self, sql: str, params: list = None) -> pd.DataFrame:
+    def get_sql_dataframe(self, sql: str, params: list = None, curs=False, conn=False) -> pd.DataFrame:
         """
          Returns a DataFrame for a given SQL query
 
         Args:
             sql: SQL string
             params: List of parameters
+            execute_flag: If set to false, the sql query will call the connection method to open tunnel and make the
+                          database connection. The connection method will recursively call this method with the
+                          execute_flag set to true.
 
         Returns: A Pandas Dataframe.
 
         """
         self._print_debug_output(f"Getting query:\n {sql}")
 
-        conn = self._get_connection()
-        with conn:
-            try:
-                if params:
-                    df = pd.read_sql_query(sql, params=params, con=conn)
-                else:
-                    df = pd.read_sql_query(sql, con=conn)
-            except Exception as e:
-                self._safe_tunnel_close()
-                raise Exception(f'Database Read Attempt Failed \n {e}')
-            finally:
-                self._safe_tunnel_close()
+        if curs:
+            if params:
+                df = pd.read_sql_query(sql, params=params, con=conn)
+            else:
+                df = pd.read_sql_query(sql, con=conn)
+        else:
+            df = self._get_connection(sql, params, self.get_sql_dataframe)
         return df
 
-    def get_sql_list_dicts(self, sql: str, params: list = None) -> List[Dict[str, Any]]:
+    def get_sql_list_dicts(self, sql: str, params: list = None, curs=False, conn=False) -> List[Dict[str, Any]]:
         """
         Returns a list of dicts for a given SQL Query
-
-        Example Output:
-            [{'some': 'data'},
-             {'more': 'otherdata'}]
 
         Args:
             sql: SQL string
             params: Parameters for SQL call
+            curs: A cursor instance. If present the method will execute the SQL. If set to False, the method will
+            call the connection method. The connection method will recursively call this method with the cursor.
+
 
         Returns:
+            Example Output:
+            [{'some': 'data'},
+             {'more': 'otherdata'}]
 
         """
         self._print_debug_output(f"Getting query:\n {sql}")
-        conn = self._get_connection()
-        with conn:
-            with conn.cursor() as curs:
-                try:
-                    if params:
-                        curs.execute(sql, params)
-                    else:
-                        curs.execute(sql)
-                    output = []
-                    columns = [column[0] for column in curs.description]
-                    for row in curs.fetchall():
-                        output.append(dict(zip(columns, row)))
-                except Exception as e:
-                    self._safe_tunnel_close()
-                    raise Exception(f'Database Read Attempt Failed \n {e}')
-                finally:
-                    self._safe_tunnel_close()
+        if curs:
+            if params:
+                curs.execute(sql, params)
+            else:
+                curs.execute(sql)
+            output = []
+            columns = [column[0] for column in curs.description]
+            for row in curs.fetchall():
+                output.append(dict(zip(columns, row)))
+        else:
+            output = self._get_connection(sql, params, self.get_sql_list_dicts)
         return output
 
-    def get_sql_single_item_list(self, sql: str, params: list = None) -> list:
+    def get_sql_single_item_list(self, sql: str, params: list = None, curs=False, conn=False) -> list:
         """
         Returns a single column list for a given SQL Query
 
@@ -233,25 +190,19 @@ class DBManager:
         """
         self._print_debug_output(f"Getting query:\n {sql}")
 
-        conn = self._get_connection()
-        with conn:
-            with conn.cursor() as curs:
-                try:
-                    if params:
-                        curs.execute(sql, params)
-                    else:
-                        curs.execute(sql)
-                    output = []
-                    for row in curs.fetchall():
-                        output.append(row[0])
-                except Exception as e:
-                    self._safe_tunnel_close()
-                    raise Exception(f'Database Read Attempt Failed \n {e}')
-                finally:
-                    self._safe_tunnel_close()
+        if curs:
+            if params:
+                curs.execute(sql, params)
+            else:
+                curs.execute(sql)
+            output = []
+            for row in curs.fetchall():
+                output.append(row[0])
+        else:
+            output = self._get_connection(sql, params, self.get_sql_single_item_list)
         return output
 
-    def execute_simple(self, sql: str, params: list = None):
+    def execute_simple(self, sql: str, params: list = None, curs=False, conn=False):
         """
         Execute as single SQL statement
 
@@ -261,22 +212,16 @@ class DBManager:
 
         Returns: None
         """
-        conn = self._get_connection()
-        with conn:
-            with conn.cursor() as curs:
-                self._print_debug_output(f"Getting query:\n {sql}")
-                try:
-                    curs.execute(sql, params)
-                    self._print_debug_output('csr.execute complete.')
-                    conn.commit()
-                    self._print_debug_output('conn.commit complete.')
-                except Exception as e:
-                    self._safe_tunnel_close()
-                    raise Exception(f'Database Execute Attempt Failed \n {e}')
-                finally:
-                    self._safe_tunnel_close()
+        if curs:
+            self._print_debug_output(f"Getting query:\n {sql}")
+            curs.execute(sql, params)
+            self._print_debug_output('csr.execute complete.')
+            conn.commit()
+            self._print_debug_output('conn.commit complete.')
+        else:
+            self._get_connection(sql, params, self.execute_simple)
 
-    def get_single_result(self, sql: str, params: list = None):
+    def get_single_result(self, sql: str, params: list = None, curs=False, conn=False):
         """
         Execute as single SQL statement
 
@@ -286,21 +231,15 @@ class DBManager:
 
         Returns: None
         """
-        conn = self._get_connection()
-        with conn:
-            with conn.cursor() as curs:
-                self._print_debug_output(f"Getting query:\n {sql}")
-                try:
-                    curs.execute(sql, params)
-                    res = curs.fetchone()
-                except Exception as e:
-                    self._safe_tunnel_close()
-                    raise Exception(f'Database Execute Attempt Failed \n {e}')
-                finally:
-                    self._safe_tunnel_close()
-        return res
+        if curs:
+            self._print_debug_output(f"Getting query:\n {sql}")
+            curs.execute(sql, params)
+            output = curs.fetchone()
+        else:
+            output = self._get_connection(sql, params, self.get_single_result)
+        return output
 
-    def execute_many(self, sql: str, params: list) -> None:
+    def execute_many(self, sql: str, params: list, curs=False, conn=False) -> None:
         """
         Executes a SQL Query
 
@@ -314,19 +253,13 @@ class DBManager:
         self._print_debug_output(f"Execute Many: Inserting {len(params)} records")
         self._print_debug_output(f"Getting query:\n {sql}")
         params = self.convert_nan_to_none(params)
-        conn = self._get_connection()
-        with conn:
-            with conn.cursor() as curs:
-                try:
-                    execute_values(curs, sql, params)
-                    duration = time.time() - start_time
-                    self._print_debug_output(f'Inserted {len(params)} rows in {round(duration, 2)} seconds')
-                    conn.commit()
-                except Exception as e:
-                    self._safe_tunnel_close()
-                    raise Exception(f'Database Execute Attempt Failed \n {e}')
-                finally:
-                    self._safe_tunnel_close()
+        if curs:
+            execute_values(curs, sql, params)
+            duration = time.time() - start_time
+            self._print_debug_output(f'Inserted {len(params)} rows in {round(duration, 2)} seconds')
+            conn.commit()
+        else:
+            self._get_connection(sql, params, self.execute_many)
 
     def delete(self, sql: str, params: list):
         """
