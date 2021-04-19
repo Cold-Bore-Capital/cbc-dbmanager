@@ -1,0 +1,16 @@
+version: '3.7'
+services:
+    postgres:
+        container_name: cbc_dbmanager_test_postgres
+        image: postgres:9.6
+        env_file:
+            - .env
+        ports:
+            - "5434:5432"
+            - "2202:22"
+        volumes:
+            - "${LOCALDATABASE}:/var/lib/postgresql/data/pgdata"
+        logging:
+            options:
+                max-size: 10m
+                max-file: "3"
