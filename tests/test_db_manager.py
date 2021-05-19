@@ -34,7 +34,7 @@ class TestDBManager(TestCase):
 
         res = db.get_single_result(sql)
 
-        if res[0]:
+        if res:
             # Delete the database
             sql = f"drop table public.{test_table_name}"
             db.execute_simple(sql)
@@ -112,9 +112,8 @@ class TestDBManager(TestCase):
     def test__get_single_result(self):
         db = self._get_db_inst()
         table_name = self._make_some_data(db)
-        res = db.get_single_result(f'select color_name from {table_name}')
+        test = db.get_single_result(f'select color_name from {table_name}')
         golden = 'red'
-        test = res[len(res)-1]
         self.assertEqual(golden, test)
 
     def test__execute_many(self):

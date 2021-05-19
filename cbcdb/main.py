@@ -54,7 +54,21 @@ class DBManager:
             db_schema:
             db_host:
         """
-        self._config = Config()
+        self._config = Config(debug_output_mode=None,
+                 use_ssh=None,
+                 ssh_key_path=None,
+                 ssh_host=None,
+                 ssh_port=None,
+                 ssh_user=None,
+                 ssh_remote_bind_address=None,
+                 ssh_remote_bind_port=None,
+                 ssh_local_bind_address=None,
+                 ssh_local_bind_port=None,
+                 db_name=None,
+                 db_user=None,
+                 db_password=None,
+                 db_schema=None,
+                 db_host=None)
         self._debug_mode = self._config.debug_output_mode if not debug_output_mode else debug_output_mode
         self._db_host = db_host if db_host else self._config.db_host
         self._db_name = db_name if db_name else self._config.db_name
@@ -237,7 +251,10 @@ class DBManager:
             output = curs.fetchone()
         else:
             output = self._get_connection(sql, params, self.get_single_result)
-        return output
+        if isinstance(output, tuple):
+            return output[0]
+        else:
+            return output
 
     def execute_many(self, sql: str, params: list, curs=False, conn=False) -> None:
         """
