@@ -373,3 +373,62 @@ class DBManager:
 
             row_counter += 1
         return params
+
+    @staticmethod
+    def update_db_statements(df: pd.DataFrame, update_cols: list, static_cols: list) -> List[Any]:
+        """
+        Returns a list of static values and a list of updated values that will be used as inputs
+        within update_write_to_db
+
+        Args:
+            df: A dataframe where each record contains a new value that will replace a value in a relational db.
+            update_cols: Column names which contain the values a user will replace in a relational db.
+            static_cols: Column names used as a unique identifier to update data in relational db.
+        Returns:
+            updated_statements: A list of strings that describe the new values that will be used as an input for update_write_to_db
+            static_statements: A list of strings that describe the unique identifiers that will be used as an input for  update_write_to_db
+        """
+        df_ = df[update_cols + static_cols].drop_duplicates()
+        updated_statements = []
+        static_statements = []
+
+        for i in range(len(df_)):
+            updated_col_val = []
+            static_col_val = []
+
+            update_vals = df_.loc[i, update_cols].values
+            static_vals = df_.loc[i, static_cols].values
+
+            for up_col, up_val, st_col, st_val  in zip(update_cols, update_vals, static_cols, static_vals):
+                updated_col_val.append(f"{up_col}='{up_val}', ")
+                static_col_val.append(f"{st_col}='{st_val}' and ")
+                # if isinstance(val, float):
+                #    updated_col_val.append(f"{col}={val}, ")
+                # else:
+                #    updated_col_val.append(f"{col}='{val}', ")
+            updated_col_val = ''.join(updated_col_val)
+            updated_statements.append(updated_col_val)
+            static_col_val = ''.join(static_col_val)
+            static_statements.append(static_col_val)
+
+        updated_statements = [x.rstrip(', ') for x in updated_statements]
+        static_statements = [x.rstrip('and ') for x in static_statements]
+        return static_statements, updated_statements
+
+    @staticmethod
+    def update_write_to_db(db: DBManager, static_statements: List, updated_statements: List, schema: str, table: str) -> None:
+        """
+        A for loop is created for simple executes where each record is updated individually.
+
+        Args:
+            db: DBManager class used to connect to database
+            static_statements: List of strings produced from update_db_statements used as a unique identifier
+            updated_statements: List of strings produced from update_db_statements which contains new values
+            schema: The schema for the table to replace values in
+            table: Table name to replace values in
+        Returns:
+            None
+        """
+        for ss, us in zip(static_statements, updated_statements):
+            sql = f"""update {schema}.{table} set  {us} where {ss};"""
+            db.execute_simple(sql)
