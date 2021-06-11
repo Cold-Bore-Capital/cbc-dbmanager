@@ -1,4 +1,6 @@
 import os
+import random
+import socket
 
 
 class ConfigurationService:
@@ -69,6 +71,7 @@ class ConfigurationService:
     """
     # section SSH Config
     """
+
     @property
     def use_ssh(self) -> bool:
         """
@@ -185,9 +188,19 @@ class ConfigurationService:
             return self._ssh_local_bind_port
 
         port = os.environ.get('LOCAL_BIND_PORT')
-        if port:
+        if port == 'random':
+            while 1 == 1:
+                rand_port = random.randint(5000, 50000)
+                if not self.is_port_in_use(rand_port):
+                    return rand_port
+        elif port:
             return int(port)
-        return None
+        return 5400
+
+    @staticmethod
+    def is_port_in_use(port: int):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(('localhost', port)) == 0
 
     """
     # section DB Config
