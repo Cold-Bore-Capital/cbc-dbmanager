@@ -162,3 +162,27 @@ class TestDBManager(TestCase):
         golden = ['ivory']
         self.assertEqual(golden, params[0])
 
+    def test__update_db_(self):
+        db = self._get_db_inst()
+        table_name = self._make_some_data(db)
+
+        # test to determine if replacing string works
+        res = db.get_sql_dataframe(f'select * from {table_name}')
+        res.loc[5,'color_name'] = 'orenge'
+        db.update_db(res, update_cols=['color_name'], static_cols=['color_id'], schema='public', table='color')
+        res = db.get_sql_dataframe(f'select * from {table_name}')
+        self.assertTrue(res.loc[5,'color_name'] == 'orenge')
+
+        # test to determine if replacing int works
+        res = db.get_sql_dataframe(f'select * from {table_name}')
+        res.loc[5,'color_id'] = 10
+        db.update_db(res, update_cols=['color_id'], static_cols=['color_name'], schema='public', table='color')
+        res = db.get_sql_dataframe(f'select * from {table_name}')
+        self.assertTrue(res.loc[5,'color_id'] == 10)
+
+        # test to determine if replacing float works
+        res = db.get_sql_dataframe(f'select * from {table_name}')
+        res.loc[5,'color_id'] = 10.0
+        db.update_db(res, update_cols=['color_id'], static_cols=['color_name'], schema='public', table='color')
+        res = db.get_sql_dataframe(f'select * from {table_name}')
+        self.assertTrue(res.loc[5,'color_id'] == 10.0)
