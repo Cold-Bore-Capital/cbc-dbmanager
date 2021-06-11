@@ -180,3 +180,10 @@ class TestDBManager(TestCase):
         db.update_db(res, update_cols=['color_id'], static_cols=['color_name'], schema='public', table='color')
         res = db.get_sql_dataframe(f'select * from {table_name}')
         self.assertTrue(res.loc[5,'color_id'] == 10)
+
+        # test to determine if replacing float works
+        res = db.get_sql_dataframe(f'select * from {table_name}')
+        res.loc[5,'color_id'] = 10.0
+        db.update_db(res, update_cols=['color_id'], static_cols=['color_name'], schema='public', table='color')
+        res = db.get_sql_dataframe(f'select * from {table_name}')
+        self.assertTrue(res.loc[5,'color_id'] == 10.0)
