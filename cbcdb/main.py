@@ -47,7 +47,8 @@ class DBManager:
             ssh_remote_bind_address:
             ssh_remote_bind_port:
             ssh_local_bind_address:
-            ssh_local_bind_port:
+            ssh_local_bind_port: In the .env file you can either set an integer, or use the word "random" to allow the
+                                 system to select a raondom port.
             db_name:
             db_user:
             db_password:
