@@ -1,7 +1,7 @@
 import os
 import random
 import socket
-
+from typing import Union
 
 class ConfigurationService:
     """
@@ -116,7 +116,7 @@ class ConfigurationService:
         return os.environ.get('SSH_HOST')
 
     @property
-    def ssh_port(self) -> int:
+    def ssh_port(self) -> Union[int, None]:
         """
         The port for SSH tunnel connection.
 
@@ -156,7 +156,7 @@ class ConfigurationService:
         return os.environ.get('REMOTE_BIND_ADDRESS')
 
     @property
-    def ssh_remote_bind_port(self) -> int:
+    def ssh_remote_bind_port(self) -> Union[int, None]:
         """
         The port number of the SSH server.
         Returns:
@@ -202,6 +202,12 @@ class ConfigurationService:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(('localhost', port)) == 0
 
+    @property
+    def ssh_logging_level(self) -> Union[int,None]:
+        logging_lvl = os.environ.get('SSH_LOGGING_LVL')
+        if logging_lvl:
+            return int(logging_lvl)
+        return None
     """
     # section DB Config
     """

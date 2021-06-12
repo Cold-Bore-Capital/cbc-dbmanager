@@ -5,7 +5,7 @@ import pandas as pd
 from numpy import inf
 from psycopg2 import connect
 from psycopg2.extras import execute_values
-from sshtunnel import open_tunnel
+from sshtunnel import open_tunnel, create_logger
 
 from cbcdb.configuration_service import ConfigurationService as Config
 
@@ -56,20 +56,20 @@ class DBManager:
             db_host:
         """
         self._config = Config(debug_output_mode=None,
-                 use_ssh=None,
-                 ssh_key_path=None,
-                 ssh_host=None,
-                 ssh_port=None,
-                 ssh_user=None,
-                 ssh_remote_bind_address=None,
-                 ssh_remote_bind_port=None,
-                 ssh_local_bind_address=None,
-                 ssh_local_bind_port=None,
-                 db_name=None,
-                 db_user=None,
-                 db_password=None,
-                 db_schema=None,
-                 db_host=None)
+                              use_ssh=None,
+                              ssh_key_path=None,
+                              ssh_host=None,
+                              ssh_port=None,
+                              ssh_user=None,
+                              ssh_remote_bind_address=None,
+                              ssh_remote_bind_port=None,
+                              ssh_local_bind_address=None,
+                              ssh_local_bind_port=None,
+                              db_name=None,
+                              db_user=None,
+                              db_password=None,
+                              db_schema=None,
+                              db_host=None)
         self._debug_mode = self._config.debug_output_mode if not debug_output_mode else debug_output_mode
         self._db_host = db_host if db_host else self._config.db_host
         self._db_name = db_name if db_name else self._config.db_name
@@ -111,7 +111,6 @@ class DBManager:
 
         Returns: The results of the original method instance.
         """
-        conn = None
         if self.use_ssh:
             with open_tunnel(
                     (self.ssh_host, self.ssh_port),
@@ -119,6 +118,8 @@ class DBManager:
                     ssh_pkey=self.ssh_key_path,
                     remote_bind_address=(self._db_host, self.ssh_remote_bind_port),
                     local_bind_address=(self.ssh_local_bind_address, self.ssh_local_bind_port)) as tunnel:
+                if self._config.ssh_logging_level:
+                    tunnel.logger = create_logger(loglevel=self._config.ssh_logging_level)
                 host = tunnel.local_bind_host
                 port = tunnel.local_bind_port
                 return self._database_connection_sub_method(host, port, method_instance, sql, params)
@@ -417,7 +418,7 @@ class DBManager:
             update_val = df_.loc[i, update_cols].values
             static_val = df_.loc[i, static_cols].values
 
-            for up_col, up_val, st_col, st_val  in zip(update_cols, update_val, static_cols, static_val):
+            for up_col, up_val, st_col, st_val in zip(update_cols, update_val, static_cols, static_val):
                 updated_col_val.append(self._set_column_value(up_col, up_val, ','))
                 static_col_val.append(self._set_column_value(st_col, st_val, ' and'))
             updated_col_val = ''.join(updated_col_val)
