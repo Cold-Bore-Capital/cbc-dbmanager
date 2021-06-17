@@ -275,7 +275,7 @@ class DBManager:
         self._print_debug_output(f"Getting query:\n {sql}")
         params = self.convert_nan_to_none(params)
         if curs:
-            sql_ = self.sql_batch_format(sql)
+            sql_ = self._fix_missing_parenthesis(sql)
             execute_batch(curs, sql_, params, self._page_size)
             duration = time.time() - start_time
             self._print_debug_output(f'Inserted {len(params)} rows in {round(duration, 2)} seconds')
@@ -284,7 +284,20 @@ class DBManager:
             self._get_connection(sql, params, self.insert_batches)
 
     @staticmethod
-    def sql_batch_format(sql: str):
+    def _fix_missing_parenthesis(sql: str) -> str:
+        """
+        Adds missing parenthesis around the %s in an update statement.
+
+        For most psycopg2 sql statements the format would be 'update db.table (name) values %s'. For some reason in the
+        case of update batches the format needs a () around the %s. Example 'update db.table (name) values (%s)'.
+
+        Args:
+            sql: A string containing the SQL statement.
+
+        Returns:
+            A string with parenthesis added if needed.
+
+        """
         x = sql.split('%s')
         if x[0][-1] != '(':
             sql_ = sql.replace('%s', '(%s)')

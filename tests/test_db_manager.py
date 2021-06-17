@@ -155,7 +155,8 @@ class TestDBManager(TestCase):
 
         # Test normal function
         sql = "insert into public.color (color_name) values %s;"
-        params = [['ivory'], ['lemon'], ['copper'], ['salmon'], ['rust'], ['amber'], ['cream'], ['tan'], ['bronze'], ['blue'], ['silver'], ['grey']]
+        params = [['ivory'], ['lemon'], ['copper'], ['salmon'], ['rust'], ['amber'], ['cream'], ['tan'], ['bronze'],
+                  ['blue'], ['silver'], ['grey']]
         db.insert_batches(sql, params)
 
         res = db.get_sql_single_item_list(f'select color_name from {table_name}')
@@ -181,6 +182,21 @@ class TestDBManager(TestCase):
         except Exception as e:
             failed = True
         self.assertTrue(failed)
+
+    def test__fix_missing_parenthesis(self):
+        db = self._get_db_inst()
+
+        # Without parenthesis.
+        sql = 'update db.table (name) values %s'
+        test = db._fix_missing_parenthesis(sql)
+        golden = 'update db.table (name) values (%s)'
+        self.assertEqual(golden, test)
+
+        # With parenthesis.
+        sql = 'update db.table (name) values (%s)'
+        test = db._fix_missing_parenthesis(sql)
+        golden = 'update db.table (name) values (%s)'
+        self.assertEqual(golden, test)
 
     def test__build_sql_from_dataframe(self):
         db = self._get_db_inst()
