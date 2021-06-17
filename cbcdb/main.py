@@ -1,10 +1,11 @@
 import time
 from typing import List, Any, Dict, Tuple
-
+from datetime import datetime
 import pandas as pd
+import numpy as np
 from numpy import inf
 from psycopg2 import connect
-from psycopg2.extras import execute_values
+from psycopg2.extras import execute_values, execute_batch
 from sshtunnel import open_tunnel, create_logger
 
 from cbcdb.configuration_service import ConfigurationService as Config
@@ -88,6 +89,8 @@ class DBManager:
             self.ssh_remote_bind_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.ssh_remote_bind_port
             self.ssh_local_bind_address = ssh_local_bind_address if ssh_local_bind_address else self._config.ssh_local_bind_address
             self.ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.ssh_local_bind_port
+
+        self._page_size = None
 
     def _print_debug_output(self, msg: str):
         """
@@ -258,7 +261,36 @@ class DBManager:
         else:
             return output
 
-    def execute_many(self, sql: str, params: list, curs=False, conn=False) -> None:
+    def insert_batches(self, sql: str, params: list, curs=False, conn=False, page_size: int = 100) -> None:
+        """
+        Executes batches of SQL Queries
+        Args:
+            sql: SQL string
+            params: List of parameters
+        Returns: None
+        """
+        self._page_size = self._page_size if self._page_size else page_size
+        start_time = time.time()
+        self._print_debug_output(f"Execute Batches: Inserting {len(params)} records")
+        self._print_debug_output(f"Getting query:\n {sql}")
+        params = self.convert_nan_to_none(params)
+        if curs:
+            sql_ = self.sql_batch_format(sql)
+            execute_batch(curs, sql_, params, self._page_size)
+            duration = time.time() - start_time
+            self._print_debug_output(f'Inserted {len(params)} rows in {round(duration, 2)} seconds')
+            conn.commit()
+        else:
+            self._get_connection(sql, params, self.insert_batches)
+
+    @staticmethod
+    def sql_batch_format(sql: str):
+        x = sql.split('%s')
+        if x[0][-1] != '(':
+            sql_ = sql.replace('%s','(%s)')
+        return sql_
+
+    def insert_many(self, sql: str, params: list, curs=False, conn=False) -> None:
         """
         Executes a SQL Query
 
@@ -278,7 +310,21 @@ class DBManager:
             self._print_debug_output(f'Inserted {len(params)} rows in {round(duration, 2)} seconds')
             conn.commit()
         else:
-            self._get_connection(sql, params, self.execute_many)
+            self._get_connection(sql, params, self.insert_many)
+
+    # look up alias decorator
+    def execute_many(self, sql: str, params: list, curs=False, conn=False) -> None:
+        """
+        Executes a SQL Query
+
+        Args:
+            sql: SQL string
+            params: List of parameters
+
+        Returns: None
+        """
+        print("Warning: execute_many will be deprecated. Please use insert_many instead.")
+        self.insert_many(sql, params, curs, conn)
 
     def delete(self, sql: str, params: list):
         """
@@ -408,6 +454,7 @@ class DBManager:
             None
         """
         df_ = df[update_cols + static_cols].drop_duplicates()
+        df_ = df_.where(pd.notnull(df_), None)
         updated_statements = []
         static_statements = []
 
@@ -418,24 +465,38 @@ class DBManager:
             update_val = df_.loc[i, update_cols].values
             static_val = df_.loc[i, static_cols].values
 
-            for up_col, up_val, st_col, st_val in zip(update_cols, update_val, static_cols, static_val):
+            for up_col, up_val in zip(update_cols, update_val):
                 updated_col_val.append(self._set_column_value(up_col, up_val, ','))
-                static_col_val.append(self._set_column_value(st_col, st_val, ' and'))
             updated_col_val = ''.join(updated_col_val)
             updated_statements.append(updated_col_val)
+
+            for st_col, st_val in zip(static_cols, static_val):
+                static_col_val.append(self._set_column_value(st_col, st_val, ' and'))
             static_col_val = ''.join(static_col_val)
             static_statements.append(static_col_val)
 
         updated_statements = [x.rstrip(', ') for x in updated_statements]
         static_statements = [x.rstrip('and ') for x in static_statements]
 
+        sql = []
         for ss, us in zip(static_statements, updated_statements):
-            sql = f"""update {schema}.{table} set  {us} where {ss};"""
-            self.execute_simple(sql)
+            sql.append(f"""update {schema}.{table} set  {us} where {ss};""")
+        sql = ' '.join(sql)
+        self.execute_simple(sql)
 
     @staticmethod
     def _set_column_value(col, val, sep):
-        if isinstance(val, float) or isinstance(val, int):
+        if isinstance(val, float) or isinstance(val, int) or isinstance(val, np.integer):
             return f"{col}={val}{sep} "
-        else:
+
+        elif isinstance(val, str):
             return f"{col}='{val}'{sep} "
+
+        elif isinstance(val, datetime):
+            if pd.isnull(val):
+                return ''
+            else:
+                return f"{col}='{val}'{sep} "
+
+        elif pd.isnull(val) or val is None:
+            return ''

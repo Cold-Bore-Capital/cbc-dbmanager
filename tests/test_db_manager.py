@@ -116,14 +116,14 @@ class TestDBManager(TestCase):
         golden = 'red'
         self.assertEqual(golden, test)
 
-    def test__execute_many(self):
+    def test__insert_many(self):
         db = self._get_db_inst()
         table_name = self._make_some_data(db)
 
         # Test normal function
         sql = 'insert into public.color (color_name) values %s;'
         params = [['ivory'], ['lemon'], ['copper'], ['salmon'], ['rust'], ['amber'], ['cream'], ['tan'], ['bronze'], ['blue'], ['silver'], ['grey']]
-        db.execute_many(sql, params)
+        db.insert_many(sql, params)
 
         res = db.get_sql_single_item_list(f'select color_name from {table_name}')
 
@@ -135,7 +135,7 @@ class TestDBManager(TestCase):
         sql = 'insert into public.color (column_that_doesnt_exist) values %s;'
         failed = False
         try:
-            db.execute_many(sql, params)
+            db.insert_many(sql, params)
         except Exception as e:
             failed = True
         self.assertTrue(failed)
@@ -144,11 +144,43 @@ class TestDBManager(TestCase):
         sql = 'insert intos public.color (color_name) values %s;'
         failed = False
         try:
-            db.execute_many(sql, params)
+            db.insert_many(sql, params)
         except Exception as e:
             failed = True
         self.assertTrue(failed)
 
+    def test__insert_batches(self):
+        db = self._get_db_inst()
+        table_name = self._make_some_data(db)
+
+        # Test normal function
+        sql = "insert into public.color (color_name) values %s;"
+        params = [['ivory'], ['lemon'], ['copper'], ['salmon'], ['rust'], ['amber'], ['cream'], ['tan'], ['bronze'], ['blue'], ['silver'], ['grey']]
+        db.insert_batches(sql, params)
+
+        res = db.get_sql_single_item_list(f'select color_name from {table_name}')
+
+        golden = 'grey'
+        test = res[len(res)-1]
+        self.assertEqual(golden, test)
+
+        # Test errors - Bad column name
+        sql = 'insert into public.color (column_that_doesnt_exist) values %s;'
+        failed = False
+        try:
+            db.insert_batches(sql, params)
+        except Exception as e:
+            failed = True
+        self.assertTrue(failed)
+
+        # Syntax error (intos vs into)
+        sql = 'insert intos public.color (color_name) values %s;'
+        failed = False
+        try:
+            db.insert_batches(sql, params)
+        except Exception as e:
+            failed = True
+        self.assertTrue(failed)
 
     def test__build_sql_from_dataframe(self):
         db = self._get_db_inst()
