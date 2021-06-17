@@ -287,7 +287,9 @@ class DBManager:
     def sql_batch_format(sql: str):
         x = sql.split('%s')
         if x[0][-1] != '(':
-            sql_ = sql.replace('%s','(%s)')
+            sql_ = sql.replace('%s', '(%s)')
+        else:
+            sql_ = sql
         return sql_
 
     def insert_many(self, sql: str, params: list, curs=False, conn=False) -> None:
