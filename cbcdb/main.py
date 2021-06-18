@@ -515,16 +515,16 @@ class DBManager:
         static_statements = [x.rstrip('and ') for x in static_statements]
 
         # new
-        statements = np.hstack((updated_statements, static_statements))
+        statements = np.hstack((updated_statements, static_statements)).tolist()
         sql = f"""update {schema}.{table} set  %s where %s;"""
         self.insert_batches(sql=sql, params=statements)
 
         # old
-        sql = []
-        for ss, us in zip(static_statements, updated_statements):
-            sql.append(f"""update {schema}.{table} set  {us} where {ss};""")
-        sql = ' '.join(sql)
-        self.execute_simple(sql)
+        #sql = []
+        #for ss, us in zip(static_statements, updated_statements):
+        #    sql.append(f"""update {schema}.{table} set  {us} where {ss};""")
+        #sql = ' '.join(sql)
+        #self.execute_simple(sql)
 
     @staticmethod
     def _set_column_value(col, val, sep):
