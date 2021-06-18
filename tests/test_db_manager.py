@@ -130,7 +130,7 @@ class TestDBManager(TestCase):
         col1 = self.create_single_row_procedural_data(num_rows)
         col2 = self.create_single_row_procedural_data(num_rows)
         params = list(zip(col1, col2))
-        sql = 'insert into public.color (color_name, another_value) values ({0})'
+        sql = 'insert into public.color (color_name, another_value) values %s'
 
         db.execute_many(sql, params)
 
