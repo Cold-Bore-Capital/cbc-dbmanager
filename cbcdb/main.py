@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from numpy import inf
 from psycopg2 import connect
-from psycopg2.extras import execute_values, execute_batch
+from psycopg2.extras import execute_values
 from sshtunnel import open_tunnel, create_logger
 
 from cbcdb.configuration_service import ConfigurationService as Config
@@ -272,7 +272,7 @@ class DBManager:
         else:
             return output
 
-    def insert_batches(self, sql: str, params: list, curs=False, conn=False, page_size: int = 100) -> None:
+    def execute_batch(self, sql: str, params: list, curs=False, conn=False, page_size: int = 100) -> None:
         """
         Executes batches of SQL Queries
         Args:
@@ -291,76 +291,16 @@ class DBManager:
         self._print_debug_output(f"Getting query:\n {sql}")
         params = self.convert_nan_to_none(params)
         if curs:
-            sql_ = self._fix_missing_parenthesis(sql)
-            execute_batch(curs, sql_, params, self._page_size)
+            sql_ = []
+            for i in params:
+                sql_.append(sql.format(*i))
+            sql_ = '; '.join(sql_)
+            curs.execute(sql_)
             duration = time.time() - start_time
             self._print_debug_output(f'Inserted {len(params)} rows in {round(duration, 2)} seconds')
             conn.commit()
         else:
             self._get_connection(sql, params, self.insert_batches)
-
-    def update_batches(self, sql: str,
-                       params: List[Dict[str, any]],
-                       curs: Union[callable, bool]=False,
-                       conn=False,
-                       page_size: int = 100) -> None:
-        """
-        Updates in batch operation.
-
-        Args:
-            sql: SQL string containing only the UPDATE portion of the statement. For example 'UPDATE my_table SET'.
-                 Do not include any parameters or filters.
-            params: A list of dicts in the format:
-             [{'filters': {'key_name': 34}, 'values': {'update_col_1': 'example value', 'update_col_2': 'another value'}]
-
-             For example:
-             [{'filters': {'id': 1421}, 'values': {'first_name': 'Bob', 'Last Name': 'Smith'}]
-
-            curs: An instance of a database cursor. Will be false when method is first called, then populated when
-                  method is called recursively.
-            conn: An instance of a database connection or false on first call.
-            page_size: Page size controls the number of records pushed in each batch.
-
-        Returns: None
-        """
-        self._page_size = self._page_size if self._page_size else page_size
-        start_time = time.time()
-        self._print_debug_output(f"Execute Batches: Inserting {len(params)} records")
-        self._print_debug_output(f"Getting query:\n {sql}")
-        params = self.convert_nan_to_none(params)
-        if curs:
-            sql_ = self._fix_missing_parenthesis(sql)
-            execute_batch(curs, sql_, params, self._page_size)
-            duration = time.time() - start_time
-            self._print_debug_output(f'Inserted {len(params)} rows in {round(duration, 2)} seconds')
-            conn.commit()
-        else:
-            self._get_connection(sql, params, self.insert_batches)
-
-    @staticmethod
-    def _build_batch_update_sql(sql, params):
-        """
-        Formats a SQL call to support batch updates.
-        Args:
-            sql:
-            params:
-
-        Returns:
-
-        """
-        update_values = params['values']
-        update_filters = params['filters']
-        set_string = ''
-        counter = 1
-        where_string = ''
-        for key in update_values.keys():
-            set_string = f'{set_string}, {key}=${set_counter}'
-            counter += 1
-
-        for key in update_values.keys():
-            set_string = f'{set_string}, {key}=${set_counter}'
-
-
 
     @staticmethod
     def _fix_missing_parenthesis(sql: str) -> str:
@@ -584,11 +524,11 @@ class DBManager:
         self.insert_batches(sql=sql, params=statements)
 
         # old
-        # sql = []
-        # for ss, us in zip(static_statements, updated_statements):
-        #    sql.append(f"""update {schema}.{table} set  {us} where {ss};""")
-        # sql = ' '.join(sql)
-        # self.execute_simple(sql)
+        sql = []
+        for ss, us in zip(static_statements, updated_statements):
+            sql.append(f"""update {schema}.{table} set  {us} where {ss};""")
+        sql = ' '.join(sql)
+        self.execute_simple(sql)
 
     @staticmethod
     def _set_column_value(col, val, sep):
