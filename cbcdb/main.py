@@ -480,6 +480,12 @@ class DBManager:
         updated_statements = [x.rstrip(', ') for x in updated_statements]
         static_statements = [x.rstrip('and ') for x in static_statements]
 
+        # new
+        statements = np.hstack((updated_statements, static_statements))
+        sql = f"""update {schema}.{table} set  %s where %s;"""
+        self.insert_batches(sql=sql, params=statements)
+
+        # old
         sql = []
         for ss, us in zip(static_statements, updated_statements):
             sql.append(f"""update {schema}.{table} set  {us} where {ss};""")
