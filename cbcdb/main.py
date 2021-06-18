@@ -148,16 +148,16 @@ class DBManager:
         Args:
             sql: SQL string
             params: List of parameters
-            execute_flag: If set to false, the sql query will call the connection method to open tunnel and make the
-                          database connection. The connection method will recursively call this method with the
-                          execute_flag set to true.
+            curs: An instance of a database cursor. Will be false when method is first called, then populated when
+                  method is called recursively.
+            conn: An instance of a database connection or false on first call.
 
-        Returns: A Pandas Dataframe.
+        Returns: A Pandas DataFrame.
 
         """
         self._print_debug_output(f"Getting query:\n {sql}")
 
-        if curs:
+        if conn:
             if params:
                 df = pd.read_sql_query(sql, params=params, con=conn)
             else:
@@ -173,8 +173,9 @@ class DBManager:
         Args:
             sql: SQL string
             params: Parameters for SQL call
-            curs: A cursor instance. If present the method will execute the SQL. If set to False, the method will
-            call the connection method. The connection method will recursively call this method with the cursor.
+            curs: An instance of a database cursor. Will be false when method is first called, then populated when
+                  method is called recursively.
+            conn: An instance of a database connection or false on first call.
 
 
         Returns:
@@ -204,6 +205,9 @@ class DBManager:
         Args:
             sql: SQL string
             params: List of parameters
+            curs: An instance of a database cursor. Will be false when method is first called, then populated when
+                  method is called recursively.
+            conn: An instance of a database connection or false on first call.
 
         Returns: A list containing the results of the query
         """
@@ -228,6 +232,9 @@ class DBManager:
         Args:
             sql: SQL string
             params: List of parameters
+            curs: An instance of a database cursor. Will be false when method is first called, then populated when
+                  method is called recursively.
+            conn: An instance of a database connection or false on first call.
 
         Returns: None
         """
@@ -247,6 +254,9 @@ class DBManager:
         Args:
             sql: SQL string
             params: List of parameters
+            curs: An instance of a database cursor. Will be false when method is first called, then populated when
+                  method is called recursively.
+            conn: An instance of a database connection or false on first call.
 
         Returns: None
         """
@@ -267,6 +277,11 @@ class DBManager:
         Args:
             sql: SQL string
             params: List of parameters
+            curs: An instance of a database cursor. Will be false when method is first called, then populated when
+                  method is called recursively.
+            conn: An instance of a database connection or false on first call.
+            page_size: Page size controls the number of records pushed in each batch.
+
         Returns: None
         """
         self._page_size = self._page_size if self._page_size else page_size
@@ -312,6 +327,9 @@ class DBManager:
         Args:
             sql: SQL string
             params: List of parameters
+            curs: An instance of a database cursor. Will be false when method is first called, then populated when
+                  method is called recursively.
+            conn: An instance of a database connection or false on first call.
 
         Returns: None
         """
@@ -335,6 +353,9 @@ class DBManager:
         Args:
             sql: SQL string
             params: List of parameters
+            curs: An instance of a database cursor. Will be false when method is first called, then populated when
+                  method is called recursively.
+            conn: An instance of a database connection or false on first call.
 
         Returns: None
         """
