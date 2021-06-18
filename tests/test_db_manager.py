@@ -131,17 +131,17 @@ class TestDBManager(TestCase):
         col2 = self.create_single_row_procedural_data(num_rows)
         params = list(zip(col1, col2))
         sql = 'insert into public.color (color_name, another_value) values %s'
-
-        db.execute_many(sql, params)
+        db.execute_batch_(sql, params)
 
         col1 = self.create_single_row_procedural_data(num_rows)
         col2 = self.create_single_row_procedural_data(num_rows)
         ids = list(range(num_rows))
         params = list(zip(col1, col2, ids))
-        sql = 'update public.color set color={0}, another_value={1} where id={2}'
-        db.execute_batch(sql, params)
-
-        debug = 0
+        # old
+        sql = 'update public.color set color_name={0}, another_value={1} where color_id={2}'
+        # new
+        sql = "update public.color set color_name='{0}', another_value='{1}' where color_id={2}"
+        db.execute_batch_(sql, params)
 
 
         # # Syntax error (intos vs into)
@@ -158,7 +158,7 @@ class TestDBManager(TestCase):
         values = []
         for i in range(num_rows):
             random_int_val = str(random.randint(0, 2147483647)).encode('ascii')
-            values.append(base64.b64encode(random_int_val))
+            values.append(base64.b64encode(random_int_val).decode('utf-8').replace('=',''))
         return values
 
     def test__insert_batches(self):

@@ -300,7 +300,7 @@ class DBManager:
             self._print_debug_output(f'Inserted {len(params)} rows in {round(duration, 2)} seconds')
             conn.commit()
         else:
-            self._get_connection(sql, params, self.insert_batches)
+            self._get_connection(sql, params, self.execute_batch)
 
     @staticmethod
     def _fix_missing_parenthesis(sql: str) -> str:
