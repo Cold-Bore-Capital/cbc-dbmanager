@@ -1,6 +1,8 @@
 from unittest import TestCase
 import pandas as pd
 # import psycopg2
+import random, base64
+
 from cbcdb.main import DBManager
 
 
@@ -19,7 +21,7 @@ class TestDBManager(TestCase):
             db_host='localhost')
         return db
 
-    def _make_some_data(self, db):
+    def _prepare_test_table(self, db, no_data_flag=False):
         # Check if the table exists
         test_table_name = 'color'
 
@@ -50,15 +52,18 @@ class TestDBManager(TestCase):
 
         sql = f"""CREATE TABLE public.{test_table_name} (
                     color_id serial,
-                    color_name VARCHAR NOT NULL
+                    color_name VARCHAR NOT NULL,
+                    another_value VARCHAR
                 );"""
 
         db.execute_simple(sql)
-        sql = f"""
-        insert into public.{test_table_name}(color_name)
-        values ('red'),('green'),('pink'),('purple'),('blue'),('cyan')
-        """
-        db.execute_simple(sql)
+
+        if not no_data_flag:
+            sql = f"""
+            insert into public.{test_table_name}(color_name)
+            values ('red'),('green'),('pink'),('purple'),('blue'),('cyan')
+            """
+            db.execute_simple(sql)
 
         return test_table_name
 
@@ -68,9 +73,11 @@ class TestDBManager(TestCase):
     #     self.assertEqual(0, conn.closed)
     #     # db._safe_tunnel_close(conn)
 
+
+
     def test__get_sql_dataframe(self):
         db = self._get_db_inst()
-        table_name = self._make_some_data(db)
+        table_name = self._prepare_test_table(db)
 
         res = db.get_sql_dataframe(f'select * from {table_name}')
         golden = 'red'
@@ -81,7 +88,7 @@ class TestDBManager(TestCase):
 
     def test__get_sql_list_dicts(self):
         db = self._get_db_inst()
-        table_name = self._make_some_data(db)
+        table_name = self._prepare_test_table(db)
 
         res = db.get_sql_list_dicts(f'select * from {table_name}')
         golden = 'red'
@@ -90,7 +97,7 @@ class TestDBManager(TestCase):
 
     def test__get_sql_single_item_list(self):
         db = self._get_db_inst()
-        table_name = self._make_some_data(db)
+        table_name = self._prepare_test_table(db)
         res = db.get_sql_single_item_list(f'select color_name from {table_name}')
         golden = 'red'
         test = res[0]
@@ -98,7 +105,7 @@ class TestDBManager(TestCase):
 
     def test__execute_simple(self):
         db = self._get_db_inst()
-        table_name = self._make_some_data(db)
+        table_name = self._prepare_test_table(db)
         sql = f"""
         insert into public.{table_name}(color_name)
         values ('abc')
@@ -111,47 +118,52 @@ class TestDBManager(TestCase):
 
     def test__get_single_result(self):
         db = self._get_db_inst()
-        table_name = self._make_some_data(db)
+        table_name = self._prepare_test_table(db)
         test = db.get_single_result(f'select color_name from {table_name}')
         golden = 'red'
         self.assertEqual(golden, test)
 
-    def test__insert_many(self):
+    def test__execute_batch(self):
         db = self._get_db_inst()
-        table_name = self._make_some_data(db)
+        table_name = self._prepare_test_table(db, True)
+        num_rows = 10000
+        col1 = self.create_single_row_procedural_data(num_rows)
+        col2 = self.create_single_row_procedural_data(num_rows)
+        params = list(zip(col1, col2))
+        sql = 'insert into public.color (color_name, another_value) values ({0})'
 
-        # Test normal function
-        sql = 'insert into public.color (color_name) values %s;'
-        params = [['ivory'], ['lemon'], ['copper'], ['salmon'], ['rust'], ['amber'], ['cream'], ['tan'], ['bronze'], ['blue'], ['silver'], ['grey']]
-        db.insert_many(sql, params)
+        db.execute_many(sql, params)
 
-        res = db.get_sql_single_item_list(f'select color_name from {table_name}')
+        col1 = self.create_single_row_procedural_data(num_rows)
+        col2 = self.create_single_row_procedural_data(num_rows)
+        ids = list(range(num_rows))
+        params = list(zip(col1, col2, ids))
+        sql = 'update public.color set color={0}, another_value={1} where id={2}'
+        db.execute_batch(sql, params)
 
-        golden = 'grey'
-        test = res[len(res)-1]
-        self.assertEqual(golden, test)
+        debug = 0
 
-        # Test errors - Bad column name
-        sql = 'insert into public.color (column_that_doesnt_exist) values %s;'
-        failed = False
-        try:
-            db.insert_many(sql, params)
-        except Exception as e:
-            failed = True
-        self.assertTrue(failed)
 
-        # Syntax error (intos vs into)
-        sql = 'insert intos public.color (color_name) values %s;'
-        failed = False
-        try:
-            db.insert_many(sql, params)
-        except Exception as e:
-            failed = True
-        self.assertTrue(failed)
+        # # Syntax error (intos vs into)
+        # sql = 'insert intos public.color (color_name) values %s;'
+        # failed = False
+        # try:
+        #     db.insert_many(sql, params)
+        # except Exception as e:
+        #     failed = True
+        # self.assertTrue(failed)
+
+    @staticmethod
+    def create_single_row_procedural_data(num_rows):
+        values = []
+        for i in range(num_rows):
+            random_int_val = str(random.randint(0, 2147483647)).encode('ascii')
+            values.append(base64.b64encode(random_int_val))
+        return values
 
     def test__insert_batches(self):
         db = self._get_db_inst()
-        table_name = self._make_some_data(db)
+        table_name = self._prepare_test_table(db)
 
         # Test normal function
         sql = "insert into public.color (color_name) values %s;"
@@ -212,7 +224,7 @@ class TestDBManager(TestCase):
 
     def test__update_db_(self):
         db = self._get_db_inst()
-        table_name = self._make_some_data(db)
+        table_name = self._prepare_test_table(db)
 
         # test to determine if replacing string works
         res = db.get_sql_dataframe(f'select * from {table_name}')
