@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from numpy import inf
 from psycopg2 import connect
-from psycopg2.extras import execute_values
+from psycopg2.extras import execute_values, execute_batch
 from sshtunnel import open_tunnel, create_logger
 
 from cbcdb.configuration_service import ConfigurationService as Config
@@ -272,7 +272,7 @@ class DBManager:
         else:
             return output
 
-    def execute_batch(self, sql: str, params: list, curs=False, conn=False, page_size: int = 100) -> None:
+    def execute_batch(self, sql: str, params: list, curs=False, conn=False, page_size: int = 1000) -> None:
         """
         Executes batches of SQL Queries
         Args:
@@ -297,7 +297,7 @@ class DBManager:
             sql_ = '; '.join(sql_)
             curs.execute(sql_)
             duration = time.time() - start_time
-            self._print_debug_output(f'Inserted {len(params)} rows in {round(duration, 2)} seconds')
+            self._print_debug_output(f'Updated {len(params)} rows in {round(duration, 2)} seconds')
             conn.commit()
         else:
             self._get_connection(sql, params, self.execute_batch)
@@ -337,11 +337,12 @@ class DBManager:
 
         Returns: None
         """
-        start_time = time.time()
-        self._print_debug_output(f"Execute Many: Inserting {len(params)} records")
-        self._print_debug_output(f"Getting query:\n {sql}")
+
         params = self.convert_nan_to_none(params)
         if curs:
+            start_time = time.time()
+            self._print_debug_output(f"Execute Many: Inserting {len(params)} records")
+            self._print_debug_output(f"Getting query:\n {sql}")
             execute_values(curs, sql, params)
             duration = time.time() - start_time
             self._print_debug_output(f'Inserted {len(params)} rows in {round(duration, 2)} seconds')
@@ -365,6 +366,46 @@ class DBManager:
         """
         print("Warning: execute_many will be deprecated. Please use insert_many instead.")
         self.insert_many(sql, params, curs, conn)
+
+    def update_batch(self, table: str, params: List[Dict[int, any]], curs=False, conn=False, page_size: int = 1000):
+        """
+
+        Args:
+            table:
+            params: [{'id': 4, 'anything': 'some value', 'another_col': 42}]
+            curs:
+            conn:
+            page_size: Page size controls the number of records pushed in each batch.
+
+        Returns: None
+        """
+        self._page_size = self._page_size if self._page_size else page_size
+        if curs:
+            start_time = time.time()
+            row_set_str = ''
+            row_execute_str = ''
+            counter = 1
+            first_row = params[0]
+            for k, val in first_row.items():
+                # 'set col_name=$1'
+                # "EXECUTE updateStmt (%(msg)s, %(id)s)"
+                if k != 'id':
+                    row_set_str = f"{row_set_str} {k}=${counter},"
+                    row_execute_str = f'{row_execute_str}%({k})s,'
+                    counter += 1
+            row_set_str = row_set_str.rstrip(',')
+            row_execute_str = row_execute_str.rstrip(',')
+            execute_str = f'execute updateStmt ({row_execute_str}, %(id)s)'
+            prepared_statement = f'prepare updateStmt as update {table} set{row_set_str} where id=${counter}'
+
+            curs.execute(prepared_statement)
+            execute_batch(curs, execute_str, params, page_size=page_size)
+            curs.execute("DEALLOCATE updateStmt")
+            conn.commit()
+            duration = time.time() - start_time
+            self._print_debug_output(f'updated {len(params)} rows in {round(duration, 2)} seconds')
+        else:
+            self._get_connection(table, params, self.update_batch)
 
     def delete(self, sql: str, params: list):
         """
@@ -532,10 +573,7 @@ class DBManager:
 
     @staticmethod
     def _set_column_value(col, val, sep):
-        if isinstance(val, float) or isinstance(val, int) or isinstance(val, np.integer):
-            return f"{col}={val}{sep} "
-
-        elif isinstance(val, str):
+        if isinstance(val, str):
             return f"{col}='{val}'{sep} "
 
         elif isinstance(val, datetime):
@@ -546,3 +584,7 @@ class DBManager:
 
         elif pd.isnull(val) or val is None:
             return ''
+
+        else:
+            # Assumed some type of number.
+            return f"{col}={val}{sep} "

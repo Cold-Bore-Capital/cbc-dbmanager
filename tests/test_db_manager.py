@@ -4,9 +4,18 @@ import pandas as pd
 import random, base64
 
 from cbcdb.main import DBManager
+from tests.docker_test_setup import start_pg_container, shutdown_pg_container
 
 
 class TestDBManager(TestCase):
+
+    def setUp(self):
+        start_pg_container()
+
+    def tearDown(self):
+        # This would shut down the container, but it's such a pain in the ass during testing.
+        #shutdown_pg_container()
+        pass
 
     @staticmethod
     def _get_db_inst():
@@ -51,7 +60,7 @@ class TestDBManager(TestCase):
         #         primary key (id));"""
 
         sql = f"""CREATE TABLE public.{test_table_name} (
-                    color_id serial,
+                    id serial,
                     color_name VARCHAR NOT NULL,
                     another_value VARCHAR
                 );"""
@@ -131,17 +140,17 @@ class TestDBManager(TestCase):
         col2 = self.create_single_row_procedural_data(num_rows)
         params = list(zip(col1, col2))
         sql = 'insert into public.color (color_name, another_value) values %s'
-        db.execute_batch_(sql, params)
+        db.insert_many(sql, params)
 
         col1 = self.create_single_row_procedural_data(num_rows)
         col2 = self.create_single_row_procedural_data(num_rows)
         ids = list(range(num_rows))
         params = list(zip(col1, col2, ids))
         # old
-        sql = 'update public.color set color_name={0}, another_value={1} where color_id={2}'
+        sql = 'update public.color set color_name={0}, another_value={1} where id={2}'
         # new
-        sql = "update public.color set color_name='{0}', another_value='{1}' where color_id={2}"
-        db.execute_batch_(sql, params)
+        sql = "update public.color set color_name='{0}', another_value='{1}' where id={2}"
+        db.execute_batch(sql, params)
 
 
         # # Syntax error (intos vs into)
@@ -153,12 +162,34 @@ class TestDBManager(TestCase):
         #     failed = True
         # self.assertTrue(failed)
 
+    def test_update_many(self):
+        # Update time notes: 50K in
+        db = self._get_db_inst()
+        table_name = self._prepare_test_table(db, True)
+        num_rows = 10000
+        col1 = self.create_single_row_procedural_data(num_rows)
+        col2 = self.create_single_row_procedural_data(num_rows)
+        params = list(zip(col1, col2))
+        sql = 'insert into public.color (color_name, another_value) values %s'
+        db.insert_many(sql, params)
+
+        # col1 = self.create_single_row_procedural_data(num_rows)
+        # col2 = self.create_single_row_procedural_data(num_rows)
+        # ids = list(range(num_rows))
+        # params = list(zip(col1, col2, ids))
+
+        params = []
+        for x in range(num_rows):
+            params.append({'id': x, 'color_name': f'red_{x}', 'another_value': f'blue_{x}'})
+
+        db.update_batch('public.color', params, page_size=num_rows)
+
     @staticmethod
     def create_single_row_procedural_data(num_rows):
         values = []
         for i in range(num_rows):
-            random_int_val = str(random.randint(0, 2147483647)).encode('ascii')
-            values.append(base64.b64encode(random_int_val).decode('utf-8').replace('=',''))
+            random_int_val = str(random.randint(0, 2147483647))
+            values.append(random_int_val)
         return values
 
     def test__insert_batches(self):
@@ -229,20 +260,20 @@ class TestDBManager(TestCase):
         # test to determine if replacing string works
         res = db.get_sql_dataframe(f'select * from {table_name}')
         res.loc[5,'color_name'] = 'orenge'
-        db.update_db(res, update_cols=['color_name'], static_cols=['color_id'], schema='public', table='color')
+        db.update_db(res, update_cols=['color_name'], static_cols=['id'], schema='public', table='color')
         res = db.get_sql_dataframe(f'select * from {table_name}')
         self.assertTrue(res.loc[5,'color_name'] == 'orenge')
 
         # test to determine if replacing int works
         res = db.get_sql_dataframe(f'select * from {table_name}')
-        res.loc[5,'color_id'] = 10
-        db.update_db(res, update_cols=['color_id'], static_cols=['color_name'], schema='public', table='color')
+        res.loc[5,'id'] = 10
+        db.update_db(res, update_cols=['id'], static_cols=['color_name'], schema='public', table='color')
         res = db.get_sql_dataframe(f'select * from {table_name}')
-        self.assertTrue(res.loc[5,'color_id'] == 10)
+        self.assertTrue(res.loc[5,'id'] == 10)
 
         # test to determine if replacing float works
         res = db.get_sql_dataframe(f'select * from {table_name}')
-        res.loc[5,'color_id'] = 10.0
-        db.update_db(res, update_cols=['color_id'], static_cols=['color_name'], schema='public', table='color')
+        res.loc[5,'id'] = 10.0
+        db.update_db(res, update_cols=['id'], static_cols=['color_name'], schema='public', table='color')
         res = db.get_sql_dataframe(f'select * from {table_name}')
-        self.assertTrue(res.loc[5,'color_id'] == 10.0)
+        self.assertTrue(res.loc[5,'id'] == 10.0)
