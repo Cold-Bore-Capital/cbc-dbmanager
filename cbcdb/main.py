@@ -367,11 +367,27 @@ class DBManager:
         print("Warning: execute_many will be deprecated. Please use insert_many instead.")
         self.insert_many(sql, params, curs, conn)
 
-    def update_batch(self, table: str, params: List[Dict[int, any]], curs=False, conn=False, page_size: int = 1000):
+    def update_batch_from_dataframe(self, schema_table: str, df: pd.DataFrame, page_size: int = 1000) -> None:
         """
 
         Args:
-            table:
+            schema_table: schema.table to be used
+            df: Dataframe where there should be one index column used as a unique identifier. the rest of the columns
+            contains values to be updated within the databse.
+            page_size: pagenation size to be used.
+
+        Returns:
+
+        """
+        params = df.to_dict(orient='records')
+        self.update_batch(schema_table, params, page_size=page_size)
+
+    def update_batch(self, schema_table: str, params: List[Dict[int, any]], curs=False, conn=False,
+                     page_size: int = 1000) -> None:
+        """
+
+        Args:
+            schema_table:
             params: [{'id': 4, 'anything': 'some value', 'another_col': 42}]
             curs:
             conn:
@@ -396,7 +412,7 @@ class DBManager:
             row_set_str = row_set_str.rstrip(',')
             row_execute_str = row_execute_str.rstrip(',')
             execute_str = f'execute updateStmt ({row_execute_str}, %(id)s)'
-            prepared_statement = f'prepare updateStmt as update {table} set{row_set_str} where id=${counter}'
+            prepared_statement = f'prepare updateStmt as update {schema_table} set{row_set_str} where id=${counter}'
 
             curs.execute(prepared_statement)
             execute_batch(curs, execute_str, params, page_size=page_size)
@@ -405,7 +421,7 @@ class DBManager:
             duration = time.time() - start_time
             self._print_debug_output(f'updated {len(params)} rows in {round(duration, 2)} seconds')
         else:
-            self._get_connection(table, params, self.update_batch)
+            self._get_connection(schema_table, params, self.update_batch)
 
     def delete(self, sql: str, params: list):
         """
@@ -520,71 +536,61 @@ class DBManager:
             row_counter += 1
         return params
 
-    def update_db(self, df: pd.DataFrame, update_cols: list, static_cols: list, schema: str, table: str) -> None:
-        """
-        Returns a list of static values and a list of updated values that will be used as inputs
-        within update_write_to_db
-
-        Args:
-            df: A dataframe where each record contains a new value that will replace a value in a relational db.
-            update_cols: Column names which contain the values a user will replace in a relational db.
-            static_cols: Column names used as a unique identifier to update data in relational db.
-            schema: The schema for the table to replace values in
-            table: Table name to replace values in
-        Returns:
-            None
-        """
-        df_ = df[update_cols + static_cols].drop_duplicates()
-        df_ = df_.where(pd.notnull(df_), None)
-        updated_statements = []
-        static_statements = []
-
-        for i in range(len(df_)):
-            updated_col_val = []
-            static_col_val = []
-
-            update_val = df_.loc[i, update_cols].values
-            static_val = df_.loc[i, static_cols].values
-
-            for up_col, up_val in zip(update_cols, update_val):
-                updated_col_val.append(self._set_column_value(up_col, up_val, ','))
-            updated_col_val = ''.join(updated_col_val)
-            updated_statements.append(updated_col_val)
-
-            for st_col, st_val in zip(static_cols, static_val):
-                static_col_val.append(self._set_column_value(st_col, st_val, ' and'))
-            static_col_val = ''.join(static_col_val)
-            static_statements.append(static_col_val)
-
-        updated_statements = [x.rstrip(', ') for x in updated_statements]
-        static_statements = [x.rstrip('and ') for x in static_statements]
-
-        # new
-        statements = np.hstack((updated_statements, static_statements)).tolist()
-        sql = f"""update {schema}.{table} set  %s where %s;"""
-        self.insert_batches(sql=sql, params=statements)
-
-        # old
-        sql = []
-        for ss, us in zip(static_statements, updated_statements):
-            sql.append(f"""update {schema}.{table} set  {us} where {ss};""")
-        sql = ' '.join(sql)
-        self.execute_simple(sql)
-
-    @staticmethod
-    def _set_column_value(col, val, sep):
-        if isinstance(val, str):
-            return f"{col}='{val}'{sep} "
-
-        elif isinstance(val, datetime):
-            if pd.isnull(val):
-                return ''
-            else:
-                return f"{col}='{val}'{sep} "
-
-        elif pd.isnull(val) or val is None:
-            return ''
-
-        else:
-            # Assumed some type of number.
-            return f"{col}={val}{sep} "
+    # def update_db(self, df: pd.DataFrame, update_cols: list, static_cols: list, schema: str, table: str) -> None:
+    #     """
+    #     Returns a list of static values and a list of updated values that will be used as inputs
+    #     within update_write_to_db
+    #
+    #     Args:
+    #         df: A dataframe where each record contains a new value that will replace a value in a relational db.
+    #         update_cols: Column names which contain the values a user will replace in a relational db.
+    #         static_cols: Column names used as a unique identifier to update data in relational db.
+    #         schema: The schema for the table to replace values in
+    #         table: Table name to replace values in
+    #     Returns:
+    #         None
+    #     """
+    #     df_ = df[update_cols + static_cols].drop_duplicates()
+    #     df_ = df_.where(pd.notnull(df_), None)
+    #     updated_statements = []
+    #     static_statements = []
+    #
+    #     for i in range(len(df_)):
+    #         updated_col_val = []
+    #         static_col_val = []
+    #
+    #         update_val = df_.loc[i, update_cols].values
+    #         static_val = df_.loc[i, static_cols].values
+    #
+    #         for up_col, up_val in zip(update_cols, update_val):
+    #             updated_col_val.append(self._set_column_value(up_col, up_val, ','))
+    #         updated_col_val = ''.join(updated_col_val)
+    #         updated_statements.append(updated_col_val)
+    #
+    #         for st_col, st_val in zip(static_cols, static_val):
+    #             static_col_val.append(self._set_column_value(st_col, st_val, ' and'))
+    #         static_col_val = ''.join(static_col_val)
+    #         static_statements.append(static_col_val)
+    #
+    #     updated_statements = [x.rstrip(', ') for x in updated_statements]
+    #     static_statements = [x.rstrip('and ') for x in static_statements]
+    #
+    #     sql = []
+    #     for ss, us in zip(static_statements, updated_statements):
+    #         sql.append(f"""update {schema}.{table} set  {us} where {ss};""")
+    #     sql = ' '.join(sql)
+    #     self.execute_simple(sql)
+    #
+    # @staticmethod
+    # def _set_column_value(col, val, sep):
+    #     if isinstance(val, str):
+    #         return f"{col}='{val}'{sep} "
+    #
+    #     elif isinstance(val, datetime):
+    #         if pd.isnull(val):
+    #             return ''
+    #         else:
+    #             return f"{col}='{val}'{sep} "
+    #
+    #     elif pd.isnull(val) or val is None:
+    #         return ''
