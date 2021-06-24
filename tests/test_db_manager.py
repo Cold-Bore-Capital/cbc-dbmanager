@@ -173,16 +173,41 @@ class TestDBManager(TestCase):
         sql = 'insert into public.color (color_name, another_value) values %s'
         db.insert_many(sql, params)
 
-        # col1 = self.create_single_row_procedural_data(num_rows)
-        # col2 = self.create_single_row_procedural_data(num_rows)
-        # ids = list(range(num_rows))
-        # params = list(zip(col1, col2, ids))
-
         params = []
         for x in range(num_rows):
             params.append({'id': x, 'color_name': f'red_{x}', 'another_value': f'blue_{x}'})
 
         db.update_batch('public.color', params, page_size=num_rows)
+
+    def test__update_batch_from_dataframe(self):
+        # Update time notes: 50K in
+        db = self._get_db_inst()
+        table_name = 'public.'+self._prepare_test_table(db, True)
+        num_rows = 10000
+        col1 = self.create_single_row_procedural_data(num_rows)
+        col2 = self.create_single_row_procedural_data(num_rows)
+        params = list(zip(col1, col2))
+        sql = 'insert into public.color (color_name, another_value) values %s'
+        db.insert_many(sql, params)
+
+        params = []
+        randomlist = random.sample(range(0, 9999), 1000)
+        for x in randomlist:
+            params.append({'id': x, 'color_name': f'red_{x}', 'another_value': f'blue_{x}'})
+
+        df = pd.DataFrame(params)
+        db.update_batch_from_dataframe(schema_table=table_name, df=df)
+
+        res = db.get_sql_dataframe(f'select * from {table_name}')
+
+        # Make sure indexes from random_list have been changed
+        self.assertEqual(len(randomlist), len(res[res.id.isin(randomlist)]))
+
+        # Make sure changed indexes contain appropriate values
+        self.assertEqual(len(randomlist), res[res.id.isin(randomlist)]['color_name'].apply(lambda x: 1 if 'red' in x else 0).sum())
+
+        # Make sure indexes from ~random_list have not been changed
+        self.assertEqual(num_rows - len(randomlist), len(res[~res.id.isin(randomlist)]))
 
     @staticmethod
     def create_single_row_procedural_data(num_rows):
@@ -192,39 +217,39 @@ class TestDBManager(TestCase):
             values.append(random_int_val)
         return values
 
-    def test__insert_batches(self):
-        db = self._get_db_inst()
-        table_name = self._prepare_test_table(db)
-
-        # Test normal function
-        sql = "insert into public.color (color_name) values %s;"
-        params = [['ivory'], ['lemon'], ['copper'], ['salmon'], ['rust'], ['amber'], ['cream'], ['tan'], ['bronze'],
-                  ['blue'], ['silver'], ['grey']]
-        db.insert_batches(sql, params)
-
-        res = db.get_sql_single_item_list(f'select color_name from {table_name}')
-
-        golden = 'grey'
-        test = res[len(res)-1]
-        self.assertEqual(golden, test)
-
-        # Test errors - Bad column name
-        sql = 'insert into public.color (column_that_doesnt_exist) values %s;'
-        failed = False
-        try:
-            db.insert_batches(sql, params)
-        except Exception as e:
-            failed = True
-        self.assertTrue(failed)
-
-        # Syntax error (intos vs into)
-        sql = 'insert intos public.color (color_name) values %s;'
-        failed = False
-        try:
-            db.insert_batches(sql, params)
-        except Exception as e:
-            failed = True
-        self.assertTrue(failed)
+    # def test__insert_batches(self):
+    #     db = self._get_db_inst()
+    #     table_name = self._prepare_test_table(db)
+    #
+    #     # Test normal function
+    #     sql = "insert into public.color (color_name) values %s;"
+    #     params = [['ivory'], ['lemon'], ['copper'], ['salmon'], ['rust'], ['amber'], ['cream'], ['tan'], ['bronze'],
+    #               ['blue'], ['silver'], ['grey']]
+    #     db.insert_batches(sql, params)
+    #
+    #     res = db.get_sql_single_item_list(f'select color_name from {table_name}')
+    #
+    #     golden = 'grey'
+    #     test = res[len(res)-1]
+    #     self.assertEqual(golden, test)
+    #
+    #     # Test errors - Bad column name
+    #     sql = 'insert into public.color (column_that_doesnt_exist) values %s;'
+    #     failed = False
+    #     try:
+    #         db.insert_batches(sql, params)
+    #     except Exception as e:
+    #         failed = True
+    #     self.assertTrue(failed)
+    #
+    #     # Syntax error (intos vs into)
+    #     sql = 'insert intos public.color (color_name) values %s;'
+    #     failed = False
+    #     try:
+    #         db.insert_batches(sql, params)
+    #     except Exception as e:
+    #         failed = True
+    #     self.assertTrue(failed)
 
     def test__fix_missing_parenthesis(self):
         db = self._get_db_inst()
@@ -253,27 +278,27 @@ class TestDBManager(TestCase):
         golden = ['ivory']
         self.assertEqual(golden, params[0])
 
-    def test__update_db_(self):
-        db = self._get_db_inst()
-        table_name = self._prepare_test_table(db)
-
-        # test to determine if replacing string works
-        res = db.get_sql_dataframe(f'select * from {table_name}')
-        res.loc[5,'color_name'] = 'orenge'
-        db.update_db(res, update_cols=['color_name'], static_cols=['id'], schema='public', table='color')
-        res = db.get_sql_dataframe(f'select * from {table_name}')
-        self.assertTrue(res.loc[5,'color_name'] == 'orenge')
-
-        # test to determine if replacing int works
-        res = db.get_sql_dataframe(f'select * from {table_name}')
-        res.loc[5,'id'] = 10
-        db.update_db(res, update_cols=['id'], static_cols=['color_name'], schema='public', table='color')
-        res = db.get_sql_dataframe(f'select * from {table_name}')
-        self.assertTrue(res.loc[5,'id'] == 10)
-
-        # test to determine if replacing float works
-        res = db.get_sql_dataframe(f'select * from {table_name}')
-        res.loc[5,'id'] = 10.0
-        db.update_db(res, update_cols=['id'], static_cols=['color_name'], schema='public', table='color')
-        res = db.get_sql_dataframe(f'select * from {table_name}')
-        self.assertTrue(res.loc[5,'id'] == 10.0)
+    # def test__update_db_(self):
+    #     db = self._get_db_inst()
+    #     table_name = self._prepare_test_table(db)
+    #
+    #     # test to determine if replacing string works
+    #     res = db.get_sql_dataframe(f'select * from {table_name}')
+    #     res.loc[5,'color_name'] = 'orenge'
+    #     db.update_db(res, update_cols=['color_name'], static_cols=['id'], schema='public', table='color')
+    #     res = db.get_sql_dataframe(f'select * from {table_name}')
+    #     self.assertTrue(res.loc[5,'color_name'] == 'orenge')
+    #
+    #     # test to determine if replacing int works
+    #     res = db.get_sql_dataframe(f'select * from {table_name}')
+    #     res.loc[5,'id'] = 10
+    #     db.update_db(res, update_cols=['id'], static_cols=['color_name'], schema='public', table='color')
+    #     res = db.get_sql_dataframe(f'select * from {table_name}')
+    #     self.assertTrue(res.loc[5,'id'] == 10)
+    #
+    #     # test to determine if replacing float works
+    #     res = db.get_sql_dataframe(f'select * from {table_name}')
+    #     res.loc[5,'id'] = 10.0
+    #     db.update_db(res, update_cols=['id'], static_cols=['color_name'], schema='public', table='color')
+    #     res = db.get_sql_dataframe(f'select * from {table_name}')
+    #     self.assertTrue(res.loc[5,'id'] == 10.0)
