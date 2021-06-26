@@ -51,13 +51,3 @@ def shutdown_pg_container():
                    capture_output=False,
                    text=True,
                    check=False)
-
-
-data = [
-    {'id': 4, 'abc': 'hello'},
-    {'id': 5, 'abc': 'hello'},
-    {'id': 6, 'abc': 'hello'},
-    {'id': 7, 'abc': 'hello'},
-    {'id': 8, 'abc': 'hello'},
-    {'id': 9, 'abc': 'hello'},
-]

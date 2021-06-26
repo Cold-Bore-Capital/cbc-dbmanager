@@ -79,6 +79,8 @@ class DBManager:
         self._db_password = db_password if db_password else self._config.db_password
         # @todo Implement this as a default schema.
         self._db_schema = db_schema if db_schema else self._config.db_schema
+        # Pubilicly accessable schema
+        self._db_schema = self._db_schema
         self._db_port = ssh_remote_bind_port if ssh_remote_bind_port else self._config.ssh_remote_bind_port
 
         self.use_ssh = use_ssh if use_ssh else self._config.use_ssh
