@@ -1,10 +1,11 @@
-from unittest import TestCase
-import pandas as pd
 # import psycopg2
-import random, base64
+import random
+from unittest import TestCase
+
+import pandas as pd
 
 from cbcdb.main import DBManager
-from tests.docker_test_setup import start_pg_container, shutdown_pg_container
+from tests.docker_test_setup import start_pg_container
 
 
 class TestDBManager(TestCase):
@@ -14,23 +15,27 @@ class TestDBManager(TestCase):
 
     def tearDown(self):
         # This would shut down the container, but it's such a pain in the ass during testing.
-        #shutdown_pg_container()
+        # shutdown_pg_container()
         pass
 
     @staticmethod
-    def _get_db_inst():
-        db = DBManager(
-            debug_output_mode=True,
-            use_ssh=False,
-            ssh_remote_bind_port=5434,
-            db_name='test',
-            db_user='test',
-            db_password='test',
-            db_schema='public',
-            db_host='localhost')
+    def _get_db_inst(test_env_defaults=False):
+        if test_env_defaults:
+            db = DBManager()
+        else:
+            db = DBManager(
+                debug_output_mode=True,
+                use_ssh=False,
+                ssh_remote_bind_port=5434,
+                db_name='test',
+                db_user='test',
+                db_password='test',
+                db_schema='public',
+                db_host='localhost')
         return db
 
-    def _prepare_test_table(self, db, no_data_flag=False):
+    @staticmethod
+    def _prepare_test_table(db, no_data_flag=False):
         # Check if the table exists
         test_table_name = 'color'
 
@@ -82,8 +87,6 @@ class TestDBManager(TestCase):
     #     self.assertEqual(0, conn.closed)
     #     # db._safe_tunnel_close(conn)
 
-
-
     def test__get_sql_dataframe(self):
         db = self._get_db_inst()
         table_name = self._prepare_test_table(db)
@@ -122,7 +125,7 @@ class TestDBManager(TestCase):
         db.execute_simple(sql)
         res = db.get_sql_single_item_list(f'select color_name from {table_name}')
         golden = 'abc'
-        test = res[len(res)-1]
+        test = res[len(res) - 1]
         self.assertEqual(golden, test)
 
     def test__get_single_result(self):
@@ -151,7 +154,6 @@ class TestDBManager(TestCase):
         # new
         sql = "update public.color set color_name='{0}', another_value='{1}' where id={2}"
         db.execute_batch(sql, params)
-
 
         # # Syntax error (intos vs into)
         # sql = 'insert intos public.color (color_name) values %s;'
@@ -182,7 +184,7 @@ class TestDBManager(TestCase):
     def test__update_batch_from_dataframe(self):
         # Update time notes: 50K in
         db = self._get_db_inst()
-        table_name = 'public.'+self._prepare_test_table(db, True)
+        table_name = 'public.' + self._prepare_test_table(db, True)
         num_rows = 10000
         col1 = self.create_single_row_procedural_data(num_rows)
         col2 = self.create_single_row_procedural_data(num_rows)
@@ -204,7 +206,8 @@ class TestDBManager(TestCase):
         self.assertEqual(len(randomlist), len(res[res.id.isin(randomlist)]))
 
         # Make sure changed indexes contain appropriate values
-        self.assertEqual(len(randomlist), res[res.id.isin(randomlist)]['color_name'].apply(lambda x: 1 if 'red' in x else 0).sum())
+        self.assertEqual(len(randomlist),
+                         res[res.id.isin(randomlist)]['color_name'].apply(lambda x: 1 if 'red' in x else 0).sum())
 
         # Make sure indexes from ~random_list have not been changed
         self.assertEqual(num_rows - len(randomlist), len(res[~res.id.isin(randomlist)]))
@@ -268,8 +271,8 @@ class TestDBManager(TestCase):
 
     def test__build_sql_from_dataframe(self):
         db = self._get_db_inst()
-        df = pd.DataFrame({'color_name':['ivory', 'lemon', 'copper', 'salmon', 'rust', 'amber', 'cream', 'tan',
-                                         'bronze', 'blue', 'silver', 'grey']})
+        df = pd.DataFrame({'color_name': ['ivory', 'lemon', 'copper', 'salmon', 'rust', 'amber', 'cream', 'tan',
+                                          'bronze', 'blue', 'silver', 'grey']})
 
         sql, params = db.build_sql_from_dataframe(df, 'color', 'public')
         golden = 'insert into public.color (color_name) values %s;'

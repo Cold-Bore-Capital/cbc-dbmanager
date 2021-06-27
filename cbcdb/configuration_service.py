@@ -1,7 +1,8 @@
 import os
 import random
 import socket
-from typing import Union
+from typing import Union, Any
+
 
 class ConfigurationService:
     """
@@ -21,9 +22,13 @@ class ConfigurationService:
                  ssh_local_bind_port=None,
                  db_name=None,
                  db_user=None,
+                 db_port=None,
                  db_password=None,
                  db_schema=None,
-                 db_host=None):
+                 db_host=None,
+                 test_mode=False,
+                 logging_level=0
+                 ):
         """
 
         Args:
@@ -51,7 +56,12 @@ class ConfigurationService:
         self._ssh_port = ssh_port
         self._ssh_user = ssh_user
         self._ssh_remote_bind_address = ssh_remote_bind_address
-        self._ssh_remote_bind_port = ssh_remote_bind_port
+        if ssh_remote_bind_port:
+            print(
+                'The setting ssh_remote_bind_port has been replaced by db_port. This will be removed in a future version.')
+            self._db_port = ssh_remote_bind_port
+        else:
+            self._db_port = db_port
         self._ssh_local_bind_address = ssh_local_bind_address
         self._ssh_local_bind_port = ssh_local_bind_port
         self._db_name = db_name
@@ -59,10 +69,13 @@ class ConfigurationService:
         self._db_password = db_password
         self._db_schema = db_schema
         self._db_host = db_host
+        self._test_mode = test_mode
+        self._logging_level = logging_level
 
     @property
     def debug_output_mode(self):
-        debug_state = os.environ.get('DEBUG_MODE')
+        debug_state = self._check_if_value_exists('DEBUG_MODE', self._debug_output_mode,
+                                                  error_flag=False, test_response='true')
         if debug_state:
             if debug_state.lower() == 'true':
                 return True
@@ -80,10 +93,7 @@ class ConfigurationService:
         Returns:
             True if set during init or if environment variable is set to true. False as default
         """
-        if self._use_ssh is not None:
-            return self._use_ssh
-
-        res = os.environ.get('USE_SSH')
+        res = self._check_if_value_exists('USE_SSH', self._ssh_key_path, error_flag=False, test_response='false')
         if res:
             if res.lower() == 'true':
                 return True
@@ -97,10 +107,8 @@ class ConfigurationService:
         Returns:
             A string containing the path to the key file.
         """
-        if self._ssh_key_path is not None:
-            return self._ssh_key_path
-
-        return os.environ.get('SSHKEYPATH')
+        return self._check_if_value_exists('SSH_KEY_PATH', self._ssh_key_path, error_flag=True, test_response='abc',
+                                           legacy_key_name='SSHKEYPATH')
 
     @property
     def ssh_host(self) -> str:
@@ -110,10 +118,7 @@ class ConfigurationService:
         Returns:
             A string containing the SSH host path.
         """
-        if self._ssh_host is not None:
-            return self._ssh_host
-
-        return os.environ.get('SSH_HOST')
+        return self._check_if_value_exists('SSH_HOST', self._ssh_host, error_flag=True, test_response='127.0.0.1')
 
     @property
     def ssh_port(self) -> Union[int, None]:
@@ -123,10 +128,7 @@ class ConfigurationService:
         Returns:
             An integer representing the SSH port
         """
-        if self._ssh_port is not None:
-            return self._ssh_port
-
-        port = os.environ.get('SSH_PORT')
+        port = self._check_if_value_exists('SSH_PORT', self._ssh_port, error_flag=True, test_response='5432')
         if port:
             return int(port)
         return None
@@ -138,10 +140,7 @@ class ConfigurationService:
         Returns:
 
         """
-        if self._ssh_user is not None:
-            return self._ssh_user
-
-        return os.environ.get('SSH_USER')
+        return self._check_if_value_exists('SSH_USER', self._ssh_user, error_flag=True, test_response='test')
 
     @property
     def ssh_remote_bind_address(self) -> str:
@@ -150,40 +149,31 @@ class ConfigurationService:
         Returns:
 
         """
-        if self._ssh_remote_bind_address is not None:
-            return self._ssh_remote_bind_address
-
-        return os.environ.get('REMOTE_BIND_ADDRESS')
-
-    @property
-    def ssh_remote_bind_port(self) -> Union[int, None]:
-        """
-        The port number of the SSH server.
-        Returns:
-
-        """
-        if self._ssh_remote_bind_port is not None:
-            return self._ssh_remote_bind_port
-
-        port = os.environ.get('REMOTE_BIND_PORT')
-        if port:
-            return int(port)
-        return None
+        return self._check_if_value_exists('REMOTE_BIND_ADDRESS', self._ssh_remote_bind_address,
+                                           error_flag=True,
+                                           test_response='0.0.0.0')
 
     @property
     def ssh_local_bind_address(self) -> str:
         """
         The address to bind to locally
         Returns:
-
+            A string in the format x.x.x.x
         """
-        if self._ssh_local_bind_address is not None:
-            return self._ssh_local_bind_address
-
-        return os.environ.get('LOCAL_BIND_HOST')
+        return self._check_if_value_exists('LOCAL_BIND_ADDRESS', self._ssh_local_bind_address,
+                                           error_flag=True, test_response='0.0.0.0', legacy_key_name='LOCAL_BIND_HOST')
 
     @property
     def ssh_local_bind_port(self) -> int:
+        """
+        Sets a local bind port.
+
+        In certain circumstances such as multi-processing, multiple SSH connections will need to be made at one time.
+        If the LOCAL_BIND_PORT value is set to random a random port number will be selected and validated as not in use.
+
+        Returns:
+            An integer to use as the SSH local bind port.
+        """
         if self._ssh_local_bind_port is not None:
             return self._ssh_local_bind_port
 
@@ -203,46 +193,123 @@ class ConfigurationService:
             return s.connect_ex(('localhost', port)) == 0
 
     @property
-    def ssh_logging_level(self) -> Union[int,None]:
-        logging_lvl = os.environ.get('SSH_LOGGING_LVL')
+    def ssh_logging_level(self) -> Union[int, None]:
+        logging_lvl = self._check_if_value_exists('SSH_LOGGING_LVL', self._logging_level,
+                                                  error_flag=False, test_response="1")
         if logging_lvl:
             return int(logging_lvl)
         return None
+
     """
     # section DB Config
     """
 
     @property
     def db_name(self) -> str:
-        if self._db_name is not None:
-            return self._db_name
-
-        return os.environ.get('DB_NAME')
+        return self._check_if_value_exists('DB_NAME',
+                                           self._db_name,
+                                           error_flag=True,
+                                           test_response="test")
 
     @property
     def db_user(self) -> str:
-        if self._db_user is not None:
-            return self._db_user
+        return self._check_if_value_exists('DB_USER',
+                                           self._db_user,
+                                           error_flag=True,
+                                           test_response="test")
 
-        return os.environ.get('DB_USER')
+    @property
+    def db_port(self) -> int:
+        """
+        The port number of the database server.
+
+        Returns:
+            An integer
+        """
+        return int(self._check_if_value_exists('DB_PORT',
+                                               self._db_port,
+                                               error_flag=True,
+                                               test_response="5432",
+                                               legacy_key_name='REMOTE_BIND_PORT'))
 
     @property
     def db_password(self) -> str:
-        if self._db_password is not None:
-            return self._db_password
-
-        return os.environ.get('DB_PASSWORD')
+        return self._check_if_value_exists('DB_PASSWORD',
+                                           self._db_password,
+                                           error_flag=True,
+                                           test_response="test")
 
     @property
     def db_schema(self) -> str:
-        if self._db_schema is not None:
-            return self._db_schema
-
-        return os.environ.get('DB_SCHEMA')
+        return self._check_if_value_exists('DB_PASSWORD',
+                                           self._db_schema,
+                                           error_flag=True,
+                                           test_response="public")
 
     @property
     def db_host(self) -> str:
-        if self._db_host is not None:
-            return self._db_host
+        return self._check_if_value_exists('DB_HOST',
+                                           self._db_host,
+                                           error_flag=True,
+                                           test_response="localhost")
 
-        return os.environ.get('DB_HOST')
+    '''
+    # End Properties
+    '''
+
+    def _check_if_value_exists(self,
+                               key_name: str,
+                               assigned_value: Any = None,
+                               error_flag: bool = None,
+                               test_response: Any = None,
+                               legacy_key_name: str = None) -> Union[None, str]:
+        """
+        Checks if an env value is set for the key. Optionally raises an error if value is not set.
+
+        Args:
+            key_name: The name of the environment variable.
+            assigned_value: A value assigned during the __init__ process. This value overrides any env value.
+            error_flag: If set to True and the following conditions exist, an error will be raised.
+                       Conditions: 1.) The env value was not set, 2.) and the assigned_value is not set.
+            test_response: Value to return if in test mode.
+            legacy_key_name: Supports a second legacy key. A warning about the legacy key will be given asking the user
+                             to update to the new key.
+
+        Returns:
+            The value or None if the value is empty.
+        """
+        # Check if the value was assigned in the constructor (__init__)
+        if assigned_value:
+            return assigned_value
+        # If in test mode, return the test response.
+        if self._test_mode:
+            return test_response
+
+        env_value = os.environ.get(key_name)
+        if legacy_key_name:
+            legacy_env_value = os.environ.get(legacy_key_name)
+        else:
+            legacy_env_value = None
+
+        if env_value:
+            # If the value is set, simply return it.
+            return env_value
+
+        elif legacy_env_value:
+            print(f'{legacy_key_name} has been deprecated. Please update your env file to use {key_name}')
+            return legacy_env_value
+        elif error_flag:
+            # If the value is not set and error_msg is not None, raise error.
+            raise MissingEnviron(key_name)
+
+        # If no error was set, and the value isn't set, return None.
+        return None
+
+
+class MissingEnviron(Exception):
+    """Raised when a required environment variable is missing"""
+
+    def __init__(self, env_var_name):
+        self.env_var_name = env_var_name
+        self.message = f'The required environment variable {self.env_var_name} is missing'
+        super().__init__(self.message)
