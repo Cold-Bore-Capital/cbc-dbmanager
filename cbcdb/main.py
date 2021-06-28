@@ -79,8 +79,8 @@ class DBManager:
         self._db_password = db_password if db_password else self._config.db_password
         # @todo Implement this as a default schema.
         self._db_schema = db_schema if db_schema else self._config.db_schema
-        # Pubilicly accessable schema
-        self._db_schema = self._db_schema
+        # Publicly accessible schema
+        self.db_schema = self._db_schema
         self._db_port = ssh_remote_bind_port if ssh_remote_bind_port else self._config.db_port
 
         self.use_ssh = use_ssh if use_ssh else self._config.use_ssh
@@ -89,7 +89,7 @@ class DBManager:
             self.ssh_port = ssh_port if ssh_port else self._config.ssh_port
             self.ssh_user = ssh_user if ssh_user else self._config.ssh_user
             self.ssh_key_path = ssh_key_path if ssh_key_path else self._config.ssh_key_path
-            self.ssh_remote_bind_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.db_port
+            self.db_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.db_port
             self.ssh_local_bind_address = ssh_local_bind_address if ssh_local_bind_address else self._config.ssh_local_bind_address
             self.ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.ssh_local_bind_port
 
@@ -122,7 +122,7 @@ class DBManager:
                     (self.ssh_host, self.ssh_port),
                     ssh_username=self.ssh_user,
                     ssh_pkey=self.ssh_key_path,
-                    remote_bind_address=(self._db_host, self.ssh_remote_bind_port),
+                    remote_bind_address=(self._db_host, self.db_port),
                     local_bind_address=(self.ssh_local_bind_address, self.ssh_local_bind_port)) as tunnel:
                 if self._config.ssh_logging_level:
                     tunnel.logger = create_logger(loglevel=self._config.ssh_logging_level)

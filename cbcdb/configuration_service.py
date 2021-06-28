@@ -241,7 +241,7 @@ class ConfigurationService:
 
     @property
     def db_schema(self) -> str:
-        return self._check_if_value_exists('DB_PASSWORD',
+        return self._check_if_value_exists('DB_SCHEMA',
                                            self._db_schema,
                                            error_flag=True,
                                            test_response="public")
