@@ -20,10 +20,17 @@ LOCALDATABASE=~/Code/dbmanager/tests/db
 # SSH
 USE_SSH=False
 
-REMOTE_BIND_PORT=5434
+# DB Config
 DB_NAME=test
 DB_USER=test
+DB_PORT=5434
 DB_PASSWORD=test
 DB_SCHEMA=public
 DB_HOST=localhost
 ```
+
+
+## Build cheat 
+
+python setup.py sdist
+twine upload dist/*
