@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Any, Dict, Tuple
 
 import pandas as pd
@@ -595,8 +595,14 @@ class DBManager:
             # Check if value is a datetime or date type.
 
             if isinstance(val, pd.Timestamp) or isinstance(val, datetime):
-                val = val.strftime('%Y-%m-%dT%H:%M:%S')
-            elif isinstance(val, datetime):
+                # if val.tzinfo is not None and val.tzinfo.utcoffset(val) is not None:
+                #     # Timezone is present
+                #
+                # else:
+
+                # It looks like the timezone will default to an empty string if not set. No need for anything fancy.
+                val = val.strftime('%Y-%m-%dT%H:%M:%S%z')
+            elif isinstance(val, date):
                 val = val.strftime('%Y-%m-%d')
             return f"{col}='{val}'{sep} "
         else:
@@ -604,7 +610,7 @@ class DBManager:
             if isinstance(val, bool):
                 # If Bool, convert to a 1 or 0 for consistency.
                 val = 1 if val else 0
-            return f"{col}={val} {sep} "
+            return f"{col}={val}{sep} "
 
 
 class MissingDatabaseColumn(Exception):

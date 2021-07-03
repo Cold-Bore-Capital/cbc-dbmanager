@@ -1,9 +1,9 @@
 # import psycopg2
 import random
 from unittest import TestCase
-
+from datetime import datetime, date
 import pandas as pd
-
+import pytz
 from cbcdb.main import DBManager, MissingDatabaseColumn, MissingDTypeFromTypes
 from tests.docker_test_setup import start_pg_container
 
@@ -170,30 +170,7 @@ class TestDBManager(TestCase):
         #     failed = True
         # self.assertTrue(failed)
 
-    def test_update_many(self):
-        # Update time notes: 50K in
-        db = self._get_db_inst()
-        table_name = self._prepare_test_table(db, True)
-        num_rows = 1000
-        col1 = self.create_single_row_procedural_data(num_rows)
-        col2 = self.create_single_row_procedural_data(num_rows)
-        params = list(zip(col1, col2))
-        sql = 'insert into public.color (color_name, another_value) values %s'
-        db.insert_many(sql, params)
-
-        params = []
-        for x in range(num_rows):
-            params.append({'id': x, 'color_name': f'red_{x}', 'another_value': f'blue_{x}'})
-
-        db.update_batch_from_df('public.color', params, page_size=num_rows)
-
-        params = []
-        for x in range(num_rows):
-            params.append({'id': x, 'color_name': f'red_{x}', 'another_value': f'blue_{x}', 'an_int': 2})
-
-        db.update_batch_from_df('public.color', params, page_size=num_rows)
-
-    def test__update_batch_from_dataframe(self):
+    def test__update_batch_from_df(self):
         # Update time notes: 50K in
         db = self._get_db_inst()
         table_name = 'public.' + self._prepare_test_table(db, True)
@@ -223,6 +200,36 @@ class TestDBManager(TestCase):
 
         # Make sure indexes from ~random_list have not been changed
         self.assertEqual(num_rows - len(randomlist), len(res[~res.id.isin(randomlist)]))
+
+    def test__set_column_value(self):
+        db = self._get_db_inst()
+
+        quote_flag_dict = {'c_string': 1, 'c_number': 0, 'c_null': 1, 'c_datetime': 1, 'c_date':1, 'c_pd_timestamp': 1,
+                           'c_tz_aware': 1, 'c_bool': 0}
+
+        test_cases = [
+            {'col': 'c_string', 'val': 'abc', 'golden': "c_string='abc', "}, # String
+            {'col': 'c_number', 'val': 1, 'golden': "c_number=1, "}, # Number
+            {'col': 'c_null', 'val': None, 'golden': "c_null=null, "}, # Null
+            {'col': 'c_datetime', 'val': datetime(2021,1,1,12,0,0),
+             'golden': "c_datetime='2021-01-01T12:00:00', "}, # datetime
+            {'col': 'c_date', 'val': date(2021, 1, 1),
+             'golden': "c_date='2021-01-01', "},  # datetime
+            {'col': 'c_pd_timestamp', 'val': pd.Timestamp(2021,1,1,12,0,0),
+             'golden': "c_pd_timestamp='2021-01-01T12:00:00', "}, # pandas timestamp
+            {'col': 'c_tz_aware', 'val': datetime(2021, 1, 1, 12, 0, 0, tzinfo=pytz.utc),
+             'golden': "c_tz_aware='2021-01-01T12:00:00+0000', "}, # Timezone aware
+            {'col': 'c_bool', 'val': True, 'golden': "c_bool=1, "},
+            {'col': 'c_bool', 'val': False, 'golden': "c_bool=0, "},
+
+        ]
+
+        for test_case in test_cases:
+            col = test_case['col']
+            val = test_case['val']
+            golden = test_case['golden']
+            test = db._set_column_value(col, val, ',', quote_flag_dict)
+            self.assertEqual(golden, test)
 
     @staticmethod
     def create_single_row_procedural_data(num_rows):
