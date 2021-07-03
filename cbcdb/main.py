@@ -453,7 +453,7 @@ class DBManager:
                         'timestamp without time zone', 'timestamp with time zone', 'time without time zone',
                         'time with time zone']
         unquoted_types = ['numeric', 'bigint', 'smallint', 'integer', 'bool', 'float4', 'float8', 'float', 'real',
-                          'double precision']
+                          'double precision', 'boolean']
         output = {}
         for col in columns:
             quote_val = None
@@ -588,9 +588,12 @@ class DBManager:
                 3. Set portion string type value "col = 'val' and"
                 4. Set portion numeric or bool value "col = val and"
         """
+        if pd.isnull(val):
+            return f"{col}=null{sep} "
         if quote_flag_dict[col]:
             # Value should be wrapped in quotes
             # Check if value is a datetime or date type.
+
             if isinstance(val, pd.Timestamp) or isinstance(val, datetime):
                 val = val.strftime('%Y-%m-%dT%H:%M:%S')
             elif isinstance(val, datetime):
