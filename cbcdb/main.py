@@ -1,12 +1,11 @@
 import time
-from datetime import datetime
-from typing import List, Any, Dict, Tuple, Union
+from datetime import datetime, date
+from typing import List, Any, Dict, Tuple
 
-import numpy as np
 import pandas as pd
 from numpy import inf
 from psycopg2 import connect
-from psycopg2.extras import execute_values, execute_batch
+from psycopg2.extras import execute_values
 from sshtunnel import open_tunnel, create_logger
 
 from cbcdb.configuration_service import ConfigurationService as Config
@@ -50,7 +49,7 @@ class DBManager:
             ssh_remote_bind_port:
             ssh_local_bind_address:
             ssh_local_bind_port: In the .env file you can either set an integer, or use the word "random" to allow the
-                                 system to select a raondom port.
+                                 system to select a random port.
             db_name:
             db_user:
             db_password:
@@ -352,6 +351,53 @@ class DBManager:
         else:
             self._get_connection(sql, params, self.insert_many)
 
+    def update_batch_from_df(self, df: pd.DataFrame, update_cols: list, static_cols: list, schema: str, table: str) -> None:
+        """
+        Generates and executes an update from a dataframe.
+
+
+        Args:
+            df: A dataframe where each record contains a new value that will replace a value in a relational db.
+            update_cols: Column names which contain the values a user will replace in a relational db.
+            static_cols: Column names used as a unique identifier to update data in relational db.
+            schema: The schema for the table to replace values in
+            table: Table name to replace values in
+        Returns:
+            None
+        """
+        df_ = df[update_cols + static_cols].drop_duplicates()
+        df_ = df_.where(pd.notnull(df_), None)
+        updated_statements = []
+        static_statements = []
+
+        quote_col_dict = self._get_table_column_dtypes(schema, table, list(df_.columns))
+
+        for i in range(len(df_)):
+            updated_col_val = []
+            static_col_val = []
+
+            update_val = df_.loc[i, update_cols].values
+            static_val = df_.loc[i, static_cols].values
+
+            for up_col, up_val in zip(update_cols, update_val):
+                updated_col_val.append(self._set_column_value(up_col, up_val, ',', quote_col_dict))
+            updated_col_val = ''.join(updated_col_val)
+            updated_statements.append(updated_col_val)
+
+            for st_col, st_val in zip(static_cols, static_val):
+                static_col_val.append(self._set_column_value(st_col, st_val, ' and', quote_col_dict))
+            static_col_val = ''.join(static_col_val)
+            static_statements.append(static_col_val)
+
+        updated_statements = [x.rstrip(', ') for x in updated_statements]
+        static_statements = [x.rstrip('and ') for x in static_statements]
+
+        sql = []
+        for ss, us in zip(static_statements, updated_statements):
+            sql.append(f"""update {schema}.{table} set  {us} where {ss};""")
+        sql = ' '.join(sql)
+        self.execute_simple(sql)
+
     # look up alias decorator
     def execute_many(self, sql: str, params: list, curs=False, conn=False) -> None:
         """
@@ -369,62 +415,6 @@ class DBManager:
         print("Warning: execute_many will be deprecated. Please use insert_many instead.")
         self.insert_many(sql, params, curs, conn)
 
-    def update_batch_from_dataframe(self, schema_table: str, df: pd.DataFrame, page_size: int = 1000) -> None:
-        """
-
-        Args:
-            schema_table: schema.table to be used
-            df: Dataframe where there should be one index column used as a unique identifier. the rest of the columns
-            contains values to be updated within the databse.
-            page_size: pagenation size to be used.
-
-        Returns:
-
-        """
-        params = df.to_dict(orient='records')
-        self.update_batch(schema_table, params, page_size=page_size)
-
-    def update_batch(self, schema_table: str, params: List[Dict[int, any]], curs=False, conn=False,
-                     page_size: int = 1000) -> None:
-        """
-
-        Args:
-            schema_table:
-            params: [{'id': 4, 'anything': 'some value', 'another_col': 42}]
-            curs:
-            conn:
-            page_size: Page size controls the number of records pushed in each batch.
-
-        Returns: None
-        """
-        self._page_size = self._page_size if self._page_size else page_size
-        if curs:
-            start_time = time.time()
-            row_set_str = ''
-            row_execute_str = ''
-            counter = 1
-            first_row = params[0]
-            for k, val in first_row.items():
-                # 'set col_name=$1'
-                # "EXECUTE updateStmt (%(msg)s, %(id)s)"
-                if k != 'id':
-                    row_set_str = f"{row_set_str} {k}=${counter},"
-                    row_execute_str = f'{row_execute_str}%({k})s,'
-                    counter += 1
-            row_set_str = row_set_str.rstrip(',')
-            row_execute_str = row_execute_str.rstrip(',')
-            execute_str = f'execute updateStmt ({row_execute_str}, %(id)s)'
-            prepared_statement = f'prepare updateStmt as update {schema_table} set{row_set_str} where id=${counter}'
-
-            curs.execute(prepared_statement)
-            execute_batch(curs, execute_str, params, page_size=page_size)
-            curs.execute("DEALLOCATE updateStmt")
-            conn.commit()
-            duration = time.time() - start_time
-            self._print_debug_output(f'updated {len(params)} rows in {round(duration, 2)} seconds')
-        else:
-            self._get_connection(schema_table, params, self.update_batch)
-
     def delete(self, sql: str, params: list):
         """
         Deletes data
@@ -438,7 +428,48 @@ class DBManager:
         print('WARNING: Depreciated function. Use execute_simple.')
         self.execute_simple(sql, params)
 
-    # Utility methods
+    # Section Utility methods
+    def _get_table_column_dtypes(self, schema: str, table: str, columns: List[str]) -> dict:
+        """
+        Queries the redshift/postgres database and requests information on the table data types. Returns a dict
+        containing each column name, and a quoted column with values 1 or 0.
+
+        Executes a query like:
+            select column_name, data_type from information_schema.columns
+            where table_schema = 'bi' and table_name = 'color';
+        Args:
+            schema: The name of the schema to query.
+            table: The name of the table to query.
+            columns: A list of columns found in the incoming update query.
+
+        Returns:
+            A dict where 1 = quoted, 0 = unquoted. Structure: {'id': 0, 'name': 1, 'age': 0, 'start_date': 1}
+        """
+        sql = f"""select column_name, data_type from information_schema.columns
+                  where table_schema = '{schema}' and table_name = '{table}';"""
+        res = self.get_sql_list_dicts(sql)
+        dtypes = {x['column_name']: x['data_type'] for x in res}
+        quoted_types = ['character varying', 'nvarchar', 'text', 'character', 'nchar', 'bpchar', 'date',
+                        'timestamp without time zone', 'timestamp with time zone', 'time without time zone',
+                        'time with time zone']
+        unquoted_types = ['numeric', 'bigint', 'smallint', 'integer', 'bool', 'float4', 'float8', 'float', 'real',
+                          'double precision', 'boolean']
+        output = {}
+        for col in columns:
+            quote_val = None
+            dtype = dtypes.get(col)
+            if not dtype:
+                raise MissingDatabaseColumn(f'The column {col} was not found in the {table} table.')
+            if dtype in quoted_types:
+                quote_val = 1
+            elif dtype in unquoted_types:
+                quote_val = 0
+            else:
+                raise MissingDTypeFromTypes(f'The column {col} in {table} table has a data type of {dtype}.'
+                                            f' This data type is not found in the quoted_types or unquoted_types list.')
+            output[col] = quote_val
+        return output
+
     @staticmethod
     def make_column_names(columns: List[str]) -> str:
         """
@@ -538,61 +569,53 @@ class DBManager:
             row_counter += 1
         return params
 
-    # def update_db(self, df: pd.DataFrame, update_cols: list, static_cols: list, schema: str, table: str) -> None:
-    #     """
-    #     Returns a list of static values and a list of updated values that will be used as inputs
-    #     within update_write_to_db
-    #
-    #     Args:
-    #         df: A dataframe where each record contains a new value that will replace a value in a relational db.
-    #         update_cols: Column names which contain the values a user will replace in a relational db.
-    #         static_cols: Column names used as a unique identifier to update data in relational db.
-    #         schema: The schema for the table to replace values in
-    #         table: Table name to replace values in
-    #     Returns:
-    #         None
-    #     """
-    #     df_ = df[update_cols + static_cols].drop_duplicates()
-    #     df_ = df_.where(pd.notnull(df_), None)
-    #     updated_statements = []
-    #     static_statements = []
-    #
-    #     for i in range(len(df_)):
-    #         updated_col_val = []
-    #         static_col_val = []
-    #
-    #         update_val = df_.loc[i, update_cols].values
-    #         static_val = df_.loc[i, static_cols].values
-    #
-    #         for up_col, up_val in zip(update_cols, update_val):
-    #             updated_col_val.append(self._set_column_value(up_col, up_val, ','))
-    #         updated_col_val = ''.join(updated_col_val)
-    #         updated_statements.append(updated_col_val)
-    #
-    #         for st_col, st_val in zip(static_cols, static_val):
-    #             static_col_val.append(self._set_column_value(st_col, st_val, ' and'))
-    #         static_col_val = ''.join(static_col_val)
-    #         static_statements.append(static_col_val)
-    #
-    #     updated_statements = [x.rstrip(', ') for x in updated_statements]
-    #     static_statements = [x.rstrip('and ') for x in static_statements]
-    #
-    #     sql = []
-    #     for ss, us in zip(static_statements, updated_statements):
-    #         sql.append(f"""update {schema}.{table} set  {us} where {ss};""")
-    #     sql = ' '.join(sql)
-    #     self.execute_simple(sql)
-    #
-    # @staticmethod
-    # def _set_column_value(col, val, sep):
-    #     if isinstance(val, str):
-    #         return f"{col}='{val}'{sep} "
-    #
-    #     elif isinstance(val, datetime):
-    #         if pd.isnull(val):
-    #             return ''
-    #         else:
-    #             return f"{col}='{val}'{sep} "
-    #
-    #     elif pd.isnull(val) or val is None:
-    #         return ''
+    @staticmethod
+    def _set_column_value(col: str, val: str, sep: str, quote_flag_dict: dict) -> str:
+        """
+        Returns a string for the "set" section of the update statement in the appropriate format based on datatype.
+
+        Args:
+            col: The name of the column. i.e. 'first_name'
+            val: The value, i.e. 'Craig'
+            sep: The type of separator to use, typically either a ',' when setting a value or 'and' for a filter.
+            quote_flag_dict: A dict containing column names as the key, and a 1 or 0 flag for quote. For example:
+                           {'first_name': 1, 'age': 0}.
+
+        Returns:
+            A string with the set or filter text. Example return formats:
+                1. Set portion string type value "col = 'val',"
+                2. Set portion numeric or bool value "col = val,"
+                3. Set portion string type value "col = 'val' and"
+                4. Set portion numeric or bool value "col = val and"
+        """
+        if pd.isnull(val):
+            return f"{col}=null{sep} "
+        if quote_flag_dict[col]:
+            # Value should be wrapped in quotes
+            # Check if value is a datetime or date type.
+
+            if isinstance(val, pd.Timestamp) or isinstance(val, datetime):
+                # if val.tzinfo is not None and val.tzinfo.utcoffset(val) is not None:
+                #     # Timezone is present
+                #
+                # else:
+
+                # It looks like the timezone will default to an empty string if not set. No need for anything fancy.
+                val = val.strftime('%Y-%m-%dT%H:%M:%S%z')
+            elif isinstance(val, date):
+                val = val.strftime('%Y-%m-%d')
+            return f"{col}='{val}'{sep} "
+        else:
+            # Value is numeric or bool
+            if isinstance(val, bool):
+                # If Bool, convert to a 1 or 0 for consistency.
+                val = 1 if val else 0
+            return f"{col}={val}{sep} "
+
+
+class MissingDatabaseColumn(Exception):
+    pass
+
+
+class MissingDTypeFromTypes(Exception):
+    pass
