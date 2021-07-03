@@ -4,7 +4,7 @@ from unittest import TestCase
 
 import pandas as pd
 
-from cbcdb.main import DBManager
+from cbcdb.main import DBManager, MissingDatabaseColumn, MissingDTypeFromTypes
 from tests.docker_test_setup import start_pg_container
 
 
@@ -67,7 +67,13 @@ class TestDBManager(TestCase):
         sql = f"""CREATE TABLE public.{test_table_name} (
                     id serial,
                     color_name VARCHAR NOT NULL,
-                    another_value VARCHAR
+                    another_value VARCHAR,
+                    an_int integer,
+                    a_date date,
+                    a_timestamp timestamp,
+                    a_number numeric(6,2),
+                    a_big_int bigint,
+                    a_small_int smallint
                 );"""
 
         db.execute_simple(sql)
@@ -168,7 +174,7 @@ class TestDBManager(TestCase):
         # Update time notes: 50K in
         db = self._get_db_inst()
         table_name = self._prepare_test_table(db, True)
-        num_rows = 10000
+        num_rows = 1000
         col1 = self.create_single_row_procedural_data(num_rows)
         col2 = self.create_single_row_procedural_data(num_rows)
         params = list(zip(col1, col2))
@@ -179,7 +185,13 @@ class TestDBManager(TestCase):
         for x in range(num_rows):
             params.append({'id': x, 'color_name': f'red_{x}', 'another_value': f'blue_{x}'})
 
-        db.update_batch('public.color', params, page_size=num_rows)
+        db.update_batch_from_df('public.color', params, page_size=num_rows)
+
+        params = []
+        for x in range(num_rows):
+            params.append({'id': x, 'color_name': f'red_{x}', 'another_value': f'blue_{x}', 'an_int': 2})
+
+        db.update_batch_from_df('public.color', params, page_size=num_rows)
 
     def test__update_batch_from_dataframe(self):
         # Update time notes: 50K in
@@ -198,7 +210,7 @@ class TestDBManager(TestCase):
             params.append({'id': x, 'color_name': f'red_{x}', 'another_value': f'blue_{x}'})
 
         df = pd.DataFrame(params)
-        db.update_batch_from_dataframe(schema_table=table_name, df=df)
+        db.update_batch_from_df(df, ['color_name', 'another_value'], ['id'], 'public', 'color')
 
         res = db.get_sql_dataframe(f'select * from {table_name}')
 
@@ -254,6 +266,38 @@ class TestDBManager(TestCase):
     #         failed = True
     #     self.assertTrue(failed)
 
+    def test__get_table_column_dtypes(self):
+        db = self._get_db_inst()
+        self._prepare_test_table(db)
+
+        # Test working
+        test = db._get_table_column_dtypes('public', 'color', ['color_name', 'another_value', 'an_int', 'a_date',
+                                                               'a_timestamp', 'a_number', 'a_big_int', 'a_small_int'])
+        golden = {'color_name': 1, 'another_value': 1, 'an_int': 0, 'a_date': 1, 'a_timestamp': 1, 'a_number': 0,
+                  'a_big_int': 0, 'a_small_int': 0}
+        self.assertDictEqual(golden, test)
+
+        # Test missing column name
+        with self.assertRaises(MissingDatabaseColumn):
+            test = db._get_table_column_dtypes('public', 'color',
+                                               ['a_bad_column_name', 'another_value', 'an_int', 'a_date',
+                                                'a_timestamp', 'a_number', 'a_big_int', 'a_small_int'])
+
+        # Test finding an unknown dtype
+        with self.assertRaises(MissingDTypeFromTypes):
+            db = MockMissingDTypeFromTypes(debug_output_mode=True,
+                                           use_ssh=False,
+                                           ssh_remote_bind_port=5434,
+                                           db_name='test',
+                                           db_user='test',
+                                           db_password='test',
+                                           db_schema='public',
+                                           db_host='localhost')
+
+            test = db._get_table_column_dtypes('public', 'color',
+                                               ['color_name', 'another_value', 'an_int', 'a_date',
+                                                'a_timestamp', 'a_number', 'a_big_int', 'a_small_int'])
+
     def test__fix_missing_parenthesis(self):
         db = self._get_db_inst()
 
@@ -271,6 +315,7 @@ class TestDBManager(TestCase):
 
     def test__build_sql_from_dataframe(self):
         db = self._get_db_inst()
+
         df = pd.DataFrame({'color_name': ['ivory', 'lemon', 'copper', 'salmon', 'rust', 'amber', 'cream', 'tan',
                                           'bronze', 'blue', 'silver', 'grey']})
 
@@ -305,3 +350,48 @@ class TestDBManager(TestCase):
     #     db.update_db(res, update_cols=['id'], static_cols=['color_name'], schema='public', table='color')
     #     res = db.get_sql_dataframe(f'select * from {table_name}')
     #     self.assertTrue(res.loc[5,'id'] == 10.0)
+
+
+class MockMissingDTypeFromTypes(DBManager):
+
+    def __init__(self,
+                 debug_output_mode=None,
+                 use_ssh=False,
+                 ssh_key_path=None,
+                 ssh_host=None,
+                 ssh_port=None,
+                 ssh_user=None,
+                 ssh_remote_bind_address=None,
+                 ssh_remote_bind_port=None,
+                 ssh_local_bind_address=None,
+                 ssh_local_bind_port=None,
+                 db_name=None,
+                 db_user=None,
+                 db_password=None,
+                 db_schema=None,
+                 db_host=None):
+        super().__init__(debug_output_mode,
+                         use_ssh,
+                         ssh_key_path,
+                         ssh_host,
+                         ssh_port,
+                         ssh_user,
+                         ssh_remote_bind_address,
+                         ssh_remote_bind_port,
+                         ssh_local_bind_address,
+                         ssh_local_bind_port,
+                         db_name,
+                         db_user,
+                         db_password,
+                         db_schema,
+                         db_host)
+
+    def get_sql_list_dicts(self, sql, params=None):
+        val = [{'column_name': 'id', 'data_type': 'integer'},
+               {'column_name': 'color_name', 'data_type': 'an unknown dtype'},  # This is the bad dtype
+               {'column_name': 'another_value', 'data_type': 'character varying'},
+               {'column_name': 'an_int', 'data_type': 'integer'}, {'column_name': 'a_date', 'data_type': 'date'},
+               {'column_name': 'a_timestamp', 'data_type': 'timestamp without time zone'},
+               {'column_name': 'a_number', 'data_type': 'numeric'}, {'column_name': 'a_big_int', 'data_type': 'bigint'},
+               {'column_name': 'a_small_int', 'data_type': 'smallint'}]
+        return val
