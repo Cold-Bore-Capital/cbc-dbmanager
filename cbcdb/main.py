@@ -33,7 +33,8 @@ class DBManager:
                  db_user=None,
                  db_password=None,
                  db_schema=None,
-                 db_host=None):
+                 db_host=None,
+                 test_mode=False):
         """
         Init Function
 
@@ -56,21 +57,23 @@ class DBManager:
             db_schema:
             db_host:
         """
-        self._config = Config(debug_output_mode=None,
-                              use_ssh=None,
-                              ssh_key_path=None,
-                              ssh_host=None,
-                              ssh_port=None,
-                              ssh_user=None,
-                              ssh_remote_bind_address=None,
-                              ssh_remote_bind_port=None,
-                              ssh_local_bind_address=None,
-                              ssh_local_bind_port=None,
-                              db_name=None,
-                              db_user=None,
-                              db_password=None,
-                              db_schema=None,
-                              db_host=None)
+        self._config = Config(debug_output_mode=debug_output_mode,
+                              use_ssh=use_ssh,
+                              ssh_key_path=ssh_key_path,
+                              ssh_host=ssh_host,
+                              ssh_port=ssh_port,
+                              ssh_user=ssh_user,
+                              ssh_remote_bind_address=ssh_remote_bind_address,
+                              ssh_remote_bind_port=ssh_remote_bind_port,
+                              ssh_local_bind_address=ssh_local_bind_address,
+                              ssh_local_bind_port=ssh_local_bind_port,
+                              db_name=db_name,
+                              db_user=db_user,
+                              db_password=db_password,
+                              db_schema=db_schema,
+                              db_host=db_host,
+                              test_mode=test_mode)
+
         self._debug_mode = self._config.debug_output_mode if not debug_output_mode else debug_output_mode
         self._db_host = db_host if db_host else self._config.db_host
         self._db_name = db_name if db_name else self._config.db_name
@@ -351,7 +354,8 @@ class DBManager:
         else:
             self._get_connection(sql, params, self.insert_many)
 
-    def update_batch_from_df(self, df: pd.DataFrame, update_cols: list, static_cols: list, schema: str, table: str) -> None:
+    def update_batch_from_df(self, df: pd.DataFrame, update_cols: list, static_cols: list, schema: str,
+                             table: str) -> None:
         """
         Generates and executes an update from a dataframe.
 
