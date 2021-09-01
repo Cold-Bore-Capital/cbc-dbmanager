@@ -160,9 +160,8 @@ class DBManager:
         Returns: A Pandas DataFrame.
 
         """
-        self._print_debug_output(f"Getting query:\n {sql}")
-
         if conn:
+            self._print_debug_output(f"Getting query:\n {sql}")
             if params:
                 df = pd.read_sql_query(sql, params=params, con=conn)
             else:
@@ -189,8 +188,8 @@ class DBManager:
              {'more': 'otherdata'}]
 
         """
-        self._print_debug_output(f"Getting query:\n {sql}")
         if curs:
+            self._print_debug_output(f"Getting query:\n {sql}")
             if params:
                 curs.execute(sql, params)
             else:
@@ -216,9 +215,8 @@ class DBManager:
 
         Returns: A list containing the results of the query
         """
-        self._print_debug_output(f"Getting query:\n {sql}")
-
         if curs:
+            self._print_debug_output(f"Getting query:\n {sql}")
             if params:
                 curs.execute(sql, params)
             else:
@@ -291,10 +289,10 @@ class DBManager:
         """
         self._page_size = self._page_size if self._page_size else page_size
         start_time = time.time()
-        self._print_debug_output(f"Execute Batches: Inserting {len(params)} records")
-        self._print_debug_output(f"Getting query:\n {sql}")
         params = self.convert_nan_to_none(params)
         if curs:
+            self._print_debug_output(f"Execute Batches: Inserting {len(params)} records")
+            self._print_debug_output(f"Getting query:\n {sql}")
             sql_ = []
             for i in params:
                 sql_.append(sql.format(*i))
@@ -305,28 +303,6 @@ class DBManager:
             conn.commit()
         else:
             self._get_connection(sql, params, self.execute_batch)
-
-    @staticmethod
-    def _fix_missing_parenthesis(sql: str) -> str:
-        """
-        Adds missing parenthesis around the %s in an update statement.
-
-        For most psycopg2 sql statements the format would be 'update db.table (name) values %s'. For some reason in the
-        case of update batches the format needs a () around the %s. Example 'update db.table (name) values (%s)'.
-
-        Args:
-            sql: A string containing the SQL statement.
-
-        Returns:
-            A string with parenthesis added if needed.
-
-        """
-        x = sql.split('%s')
-        if x[0][-1] != '(':
-            sql_ = sql.replace('%s', '(%s)')
-        else:
-            sql_ = sql
-        return sql_
 
     def insert_many(self, sql: str, params: list, curs=False, conn=False) -> None:
         """

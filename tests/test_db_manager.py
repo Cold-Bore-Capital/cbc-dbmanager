@@ -305,21 +305,6 @@ class TestDBManager(TestCase):
                                                ['color_name', 'another_value', 'an_int', 'a_date',
                                                 'a_timestamp', 'a_number', 'a_big_int', 'a_small_int'])
 
-    def test__fix_missing_parenthesis(self):
-        db = self._get_db_inst()
-
-        # Without parenthesis.
-        sql = 'update db.table (name) values %s'
-        test = db._fix_missing_parenthesis(sql)
-        golden = 'update db.table (name) values (%s)'
-        self.assertEqual(golden, test)
-
-        # With parenthesis.
-        sql = 'update db.table (name) values (%s)'
-        test = db._fix_missing_parenthesis(sql)
-        golden = 'update db.table (name) values (%s)'
-        self.assertEqual(golden, test)
-
     def test__build_sql_from_dataframe(self):
         db = self._get_db_inst()
 
