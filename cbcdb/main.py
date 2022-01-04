@@ -1,7 +1,7 @@
 import time
 from datetime import datetime, date
 from typing import List, Any, Dict, Tuple
-
+from dotenv import load_dotenv
 import pandas as pd
 from numpy import inf
 from psycopg2 import connect
@@ -34,7 +34,8 @@ class DBManager:
                  db_password=None,
                  db_schema=None,
                  db_host=None,
-                 test_mode=False):
+                 test_mode=False,
+                 dotenv_load=False):
         """
         Init Function
 
@@ -57,6 +58,8 @@ class DBManager:
             db_schema:
             db_host:
         """
+        if dotenv_load:
+            load_dotenv()
         self._config = Config(debug_output_mode=debug_output_mode,
                               use_ssh=use_ssh,
                               ssh_key_path=ssh_key_path,
