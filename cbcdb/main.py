@@ -11,6 +11,7 @@ from sshtunnel import open_tunnel, create_logger
 import random
 from configservice.config import Config
 
+
 class DBManager:
     """
     DBManager handled the read and write information to the DB.
@@ -19,7 +20,8 @@ class DBManager:
     """
 
     def __init__(self,
-                 use_aws_secrets=False,
+                 use_aws_secrets=True,
+                 secret_name='etl/config/env',
                  debug_output_mode=None,
                  use_ssh=False,
                  ssh_key_path=None,
@@ -62,8 +64,7 @@ class DBManager:
         if dotenv_load:
             load_dotenv()
 
-        self._config = Config(profile_name='pwa', secret_name='etl/config/env', test_mode=test_mode)
-
+        self._config = Config(secret_name=secret_name, test_mode=test_mode)
         if use_aws_secrets:
             self._config.get_all_secrets()
 
@@ -75,7 +76,6 @@ class DBManager:
             self._db_schema = db_schema if db_schema else self._config.get_secret('DB_SCHEMA')
             # Publicly accessible schema
             self.db_schema = self._db_schema
-            self._db_port = ssh_remote_bind_port if ssh_remote_bind_port else self._config.get_secret('DB_PORT')
 
             self.use_ssh = use_ssh if use_ssh else self._config.get_secret('USE_SSH')
             if self.use_ssh:
@@ -83,16 +83,19 @@ class DBManager:
                 self.ssh_port = ssh_port if ssh_port else self._config.get_secret('SSH_PORT', data_type_convert='int')
                 self.ssh_user = ssh_user if ssh_user else self._config.get_secret('SSH_USER')
                 self.ssh_key_path = ssh_key_path if ssh_key_path else self._config.get_secret('SSH_KEY_PATH')
-                self.db_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.get_secret('DB_PORT', data_type_convert='int')
-                self.ssh_local_bind_address = ssh_local_bind_address if ssh_local_bind_address else self._config.get_secret('SSH_LOCAL_BIND_ADDRESS')
-                self.ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.get_secret('SSH_LOCAL_BIND_PORT', data_type_convert='int')
+                self.db_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.get_secret('DB_PORT',
+                                                                                                        data_type_convert='int')
+                self.ssh_local_bind_address = ssh_local_bind_address if ssh_local_bind_address else self._config.get_secret(
+                    'SSH_LOCAL_BIND_ADDRESS')
+                self.ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.get_secret(
+                    'SSH_LOCAL_BIND_PORT', data_type_convert='int')
 
             self._page_size = None
         else:
             if dotenv_load:
                 load_dotenv()
 
-            #self._debug_mode = self.debug_output_mode if not debug_output_mode else debug_output_mode
+            # self._debug_mode = self.debug_output_mode if not debug_output_mode else debug_output_mode
             self._debug_mode = debug_output_mode
             self._db_host = db_host if db_host else self._config.get_env('DB_HOST')
             self._db_name = db_name if db_name else self._config.get_env('DB_NAME')
@@ -104,7 +107,7 @@ class DBManager:
             self.db_schema = self._db_schema
             self._db_port = ssh_remote_bind_port if ssh_remote_bind_port else self._config.get_env('DB_PORT')
 
-            self.use_ssh = use_ssh if use_ssh else self._config.get_env('USE_SSH')==True
+            self.use_ssh = use_ssh if use_ssh else self._config.get_env('USE_SSH') == True
             if self.use_ssh:
                 self.ssh_host = ssh_host if ssh_host else self._config.get_env('SSH_HOST')
                 self.ssh_port = ssh_port if ssh_port else self._config.get_env('SSH_PORT')
