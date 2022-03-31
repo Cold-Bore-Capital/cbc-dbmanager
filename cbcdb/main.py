@@ -22,7 +22,10 @@ class DBManager:
 
     def __init__(self,
                  use_aws_secrets=True,
+                 profile_name=None,
                  secret_name=None,
+                 region_name=None,
+                 aws_cache=None,
                  debug_output_mode=None,
                  use_ssh=False,
                  ssh_key_path=None,
@@ -65,7 +68,11 @@ class DBManager:
         if dotenv_load:
             load_dotenv()
 
-        self._config = Config(secret_name=secret_name, test_mode=test_mode)
+        self._config = Config(profile_name=profile_name,
+                              secret_name=secret_name,
+                              aws_cache=aws_cache,
+                              region_name=region_name,
+                              test_mode=test_mode)
         if use_aws_secrets:
             self._config.get_all_secrets()
 
