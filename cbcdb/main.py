@@ -1,6 +1,7 @@
 import time
 from datetime import datetime, date
 from typing import List, Any, Dict, Tuple
+import distutils
 from dotenv import load_dotenv
 import pandas as pd
 from numpy import inf
@@ -21,7 +22,7 @@ class DBManager:
 
     def __init__(self,
                  use_aws_secrets=True,
-                 secret_name='etl/config/env',
+                 secret_name=None,
                  debug_output_mode=None,
                  use_ssh=False,
                  ssh_key_path=None,
@@ -76,15 +77,17 @@ class DBManager:
             self._db_schema = db_schema if db_schema else self._config.get_secret('DB_SCHEMA')
             # Publicly accessible schema
             self.db_schema = self._db_schema
+            self._db_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.get_secret('DB_PORT',
+                                                                                                     data_type_convert='int')
+            self.use_ssh = use_ssh if use_ssh else self._config.get_env('USE_SSH', data_type_convert='bool')
 
-            self.use_ssh = use_ssh if use_ssh else self._config.get_secret('USE_SSH')
             if self.use_ssh:
                 self.ssh_host = ssh_host if ssh_host else self._config.get_secret('SSH_HOST')
                 self.ssh_port = ssh_port if ssh_port else self._config.get_secret('SSH_PORT', data_type_convert='int')
                 self.ssh_user = ssh_user if ssh_user else self._config.get_secret('SSH_USER')
                 self.ssh_key_path = ssh_key_path if ssh_key_path else self._config.get_secret('SSH_KEY_PATH')
                 self.db_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.get_secret('DB_PORT',
-                                                                                                        data_type_convert='int')
+                                                                                                         data_type_convert='int')
                 self.ssh_local_bind_address = ssh_local_bind_address if ssh_local_bind_address else self._config.get_secret(
                     'SSH_LOCAL_BIND_ADDRESS')
                 self.ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.get_secret(
@@ -92,9 +95,6 @@ class DBManager:
 
             self._page_size = None
         else:
-            if dotenv_load:
-                load_dotenv()
-
             # self._debug_mode = self.debug_output_mode if not debug_output_mode else debug_output_mode
             self._debug_mode = debug_output_mode
             self._db_host = db_host if db_host else self._config.get_env('DB_HOST')
@@ -105,9 +105,10 @@ class DBManager:
             self._db_schema = db_schema if db_schema else self._config.get_env('DB_SCHEMA')
             # Publicly accessible schema
             self.db_schema = self._db_schema
-            self._db_port = ssh_remote_bind_port if ssh_remote_bind_port else self._config.get_env('DB_PORT')
+            self._db_port = ssh_remote_bind_port if ssh_remote_bind_port else self._config.get_env('DB_PORT',
+                                                                                                   data_type_convert='bool')
 
-            self.use_ssh = use_ssh if use_ssh else self._config.get_env('USE_SSH') == True
+            self.use_ssh = use_ssh if use_ssh else self._config.get_env('USE_SSH', data_type_convert='bool')
             if self.use_ssh:
                 self.ssh_host = ssh_host if ssh_host else self._config.get_env('SSH_HOST')
                 self.ssh_port = ssh_port if ssh_port else self._config.get_env('SSH_PORT')
@@ -163,7 +164,7 @@ class DBManager:
                     ssh_pkey=self.ssh_key_path,
                     remote_bind_address=(self._db_host, self.db_port),
                     local_bind_address=(self.ssh_local_bind_address, self.ssh_local_bind_port)) as tunnel:
-                if self._config.ssh_logging_level:
+                if self._config.get_secret('SSH_LOGGING_LEVEL', 'bool'):
                     tunnel.logger = create_logger(loglevel=self._config.ssh_logging_level)
                 host = tunnel.local_bind_host
                 port = tunnel.local_bind_port
