@@ -1,16 +1,16 @@
+import random
+import socket
 import time
 from datetime import datetime, date
 from typing import List, Any, Dict, Tuple
-import distutils
-from dotenv import load_dotenv
+
 import pandas as pd
+from configservice.config import Config
+from dotenv import load_dotenv
 from numpy import inf
 from psycopg2 import connect
 from psycopg2.extras import execute_values
-import socket
 from sshtunnel import open_tunnel, create_logger
-import random
-from configservice.config import Config
 
 
 class DBManager:
@@ -41,6 +41,7 @@ class DBManager:
                  db_password=None,
                  db_schema=None,
                  db_host=None,
+                 db_port=None,
                  test_mode=False,
                  dotenv_load=False):
         """
@@ -64,6 +65,9 @@ class DBManager:
             db_password:
             db_schema:
             db_host:
+            db_port:
+            test_mode:
+            dotenv_load:
         """
         if dotenv_load:
             load_dotenv()
@@ -84,17 +88,20 @@ class DBManager:
             self._db_schema = db_schema if db_schema else self._config.get_secret('DB_SCHEMA')
             # Publicly accessible schema
             self.db_schema = self._db_schema
-            self._db_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.get_secret('DB_PORT',
-                                                                                                     data_type_convert='int')
+            if db_port:
+                self._db_port = db_port if db_port else self._config.get_secret('DB_PORT',
+                                                                                data_type_convert='int')
+            else:
+                self._db_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.get_secret('DB_PORT',
+                                                                                                         data_type_convert='int')
             self.use_ssh = use_ssh if use_ssh else self._config.get_env('USE_SSH', data_type_convert='bool')
-
             if self.use_ssh:
                 self.ssh_host = ssh_host if ssh_host else self._config.get_secret('SSH_HOST')
                 self.ssh_port = ssh_port if ssh_port else self._config.get_secret('SSH_PORT', data_type_convert='int')
                 self.ssh_user = ssh_user if ssh_user else self._config.get_secret('SSH_USER')
                 self.ssh_key_path = ssh_key_path if ssh_key_path else self._config.get_secret('SSH_KEY_PATH')
                 self.db_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.get_secret('DB_PORT',
-                                                                                                         data_type_convert='int')
+                                                                                                        data_type_convert='int')
                 self.ssh_local_bind_address = ssh_local_bind_address if ssh_local_bind_address else self._config.get_secret(
                     'SSH_LOCAL_BIND_ADDRESS')
                 self.ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.get_secret(
@@ -112,21 +119,28 @@ class DBManager:
             self._db_schema = db_schema if db_schema else self._config.get_env('DB_SCHEMA')
             # Publicly accessible schema
             self.db_schema = self._db_schema
-            self._db_port = ssh_remote_bind_port if ssh_remote_bind_port else self._config.get_env('DB_PORT',
-                                                                                                   data_type_convert='bool')
-
             self.use_ssh = use_ssh if use_ssh else self._config.get_env('USE_SSH', data_type_convert='bool')
+            if db_port:
+                self._db_port = db_port if db_port else self._config.get_env('DB_PORT',
+                                                                             data_type_convert='bool')
+            else:
+                self._db_port = ssh_remote_bind_port if ssh_remote_bind_port else self._config.get_env('DB_PORT',
+                                                                                                       data_type_convert='bool')
             if self.use_ssh:
                 self.ssh_host = ssh_host if ssh_host else self._config.get_env('SSH_HOST')
                 self.ssh_port = ssh_port if ssh_port else self._config.get_env('SSH_PORT')
 
                 self.ssh_user = ssh_user if ssh_user else self._config.get_env('SSH_USER')
                 self.ssh_key_path = ssh_key_path if ssh_key_path else self._config.get_env('SSH_KEY_PATH')
-                self.db_port = ssh_remote_bind_port if ssh_local_bind_port else int(self._config.get_env('DB_PORT'))
                 self.ssh_local_bind_address = ssh_local_bind_address if ssh_local_bind_address else self._config.ssh_local_bind_port
-                self.ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.get_env('SSH_LOCAL_BIND_PORT')
+                self.ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.get_env(
+                    'SSH_LOCAL_BIND_PORT')
 
             self._page_size = None
+
+        # Convert DB port if needed.
+        if not isinstance(int, self._db_port):
+            self._db_port = int(self._db_port)
 
     def _get_random_port(self, port):
         if port == 'random':
