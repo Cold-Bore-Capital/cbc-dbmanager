@@ -139,7 +139,7 @@ class DBManager:
             self._page_size = None
 
         # Convert DB port if needed.
-        if not isinstance(int, self._db_port):
+        if not isinstance(self._db_port, int):
             self._db_port = int(self._db_port)
 
     def _get_random_port(self, port):
