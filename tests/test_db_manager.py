@@ -204,21 +204,21 @@ class TestDBManager(TestCase):
     def test__set_column_value(self):
         db = self._get_db_inst()
 
-        quote_flag_dict = {'c_string': 1, 'c_number': 0, 'c_null': 1, 'c_datetime': 1, 'c_date':1, 'c_pd_timestamp': 1,
+        quote_flag_dict = {'c_string': 1, 'c_number': 0, 'c_null': 1, 'c_datetime': 1, 'c_date': 1, 'c_pd_timestamp': 1,
                            'c_tz_aware': 1, 'c_bool': 0}
 
         test_cases = [
-            {'col': 'c_string', 'val': 'abc', 'golden': "c_string='abc', "}, # String
-            {'col': 'c_number', 'val': 1, 'golden': "c_number=1, "}, # Number
-            {'col': 'c_null', 'val': None, 'golden': "c_null=null, "}, # Null
-            {'col': 'c_datetime', 'val': datetime(2021,1,1,12,0,0),
-             'golden': "c_datetime='2021-01-01T12:00:00', "}, # datetime
+            {'col': 'c_string', 'val': 'abc', 'golden': "c_string='abc', "},  # String
+            {'col': 'c_number', 'val': 1, 'golden': "c_number=1, "},  # Number
+            {'col': 'c_null', 'val': None, 'golden': "c_null=null, "},  # Null
+            {'col': 'c_datetime', 'val': datetime(2021, 1, 1, 12, 0, 0),
+             'golden': "c_datetime='2021-01-01T12:00:00', "},  # datetime
             {'col': 'c_date', 'val': date(2021, 1, 1),
              'golden': "c_date='2021-01-01', "},  # datetime
-            {'col': 'c_pd_timestamp', 'val': pd.Timestamp(2021,1,1,12,0,0),
-             'golden': "c_pd_timestamp='2021-01-01T12:00:00', "}, # pandas timestamp
+            {'col': 'c_pd_timestamp', 'val': pd.Timestamp(2021, 1, 1, 12, 0, 0),
+             'golden': "c_pd_timestamp='2021-01-01T12:00:00', "},  # pandas timestamp
             {'col': 'c_tz_aware', 'val': datetime(2021, 1, 1, 12, 0, 0, tzinfo=pytz.utc),
-             'golden': "c_tz_aware='2021-01-01T12:00:00+0000', "}, # Timezone aware
+             'golden': "c_tz_aware='2021-01-01T12:00:00+0000', "},  # Timezone aware
             {'col': 'c_bool', 'val': True, 'golden': "c_bool=1, "},
             {'col': 'c_bool', 'val': False, 'golden': "c_bool=0, "},
 
@@ -343,47 +343,60 @@ class TestDBManager(TestCase):
     #     res = db.get_sql_dataframe(f'select * from {table_name}')
     #     self.assertTrue(res.loc[5,'id'] == 10.0)
 
+    def test__remove_duplicates(self):
+        db = self._get_db_inst()
 
-class MockMissingDTypeFromTypes(DBManager):
+        res = db.remove_duplicates("bi", "emp", "id", "emp_id", ["id", "emp_id"])
+        print(res)
+        res = db.remove_duplicates("bi", "emp", "id", ["emp_id", "hotel_id"], ["id", "emp_id"])
+        print(res)
+        res = db.remove_duplicates("bi", "emp", "id", ["emp_id", "hotel_id"], "id")
+        print(res)
+        res = db.remove_duplicates("bi", "emp", "id", "emp_id", "emp_id")
+        print(res)
+        a = 0
 
-    def __init__(self,
-                 debug_output_mode=None,
-                 use_ssh=False,
-                 ssh_key_path=None,
-                 ssh_host=None,
-                 ssh_port=None,
-                 ssh_user=None,
-                 ssh_remote_bind_address=None,
-                 ssh_remote_bind_port=None,
-                 ssh_local_bind_address=None,
-                 ssh_local_bind_port=None,
-                 db_name=None,
-                 db_user=None,
-                 db_password=None,
-                 db_schema=None,
-                 db_host=None):
-        super().__init__(debug_output_mode,
-                         use_ssh,
-                         ssh_key_path,
-                         ssh_host,
-                         ssh_port,
-                         ssh_user,
-                         ssh_remote_bind_address,
-                         ssh_remote_bind_port,
-                         ssh_local_bind_address,
-                         ssh_local_bind_port,
-                         db_name,
-                         db_user,
-                         db_password,
-                         db_schema,
-                         db_host)
+    class MockMissingDTypeFromTypes(DBManager):
 
-    def get_sql_list_dicts(self, sql, params=None):
-        val = [{'column_name': 'id', 'data_type': 'integer'},
-               {'column_name': 'color_name', 'data_type': 'an unknown dtype'},  # This is the bad dtype
-               {'column_name': 'another_value', 'data_type': 'character varying'},
-               {'column_name': 'an_int', 'data_type': 'integer'}, {'column_name': 'a_date', 'data_type': 'date'},
-               {'column_name': 'a_timestamp', 'data_type': 'timestamp without time zone'},
-               {'column_name': 'a_number', 'data_type': 'numeric'}, {'column_name': 'a_big_int', 'data_type': 'bigint'},
-               {'column_name': 'a_small_int', 'data_type': 'smallint'}]
-        return val
+        def __init__(self,
+                     debug_output_mode=None,
+                     use_ssh=False,
+                     ssh_key_path=None,
+                     ssh_host=None,
+                     ssh_port=None,
+                     ssh_user=None,
+                     ssh_remote_bind_address=None,
+                     ssh_remote_bind_port=None,
+                     ssh_local_bind_address=None,
+                     ssh_local_bind_port=None,
+                     db_name=None,
+                     db_user=None,
+                     db_password=None,
+                     db_schema=None,
+                     db_host=None):
+            super().__init__(debug_output_mode,
+                             use_ssh,
+                             ssh_key_path,
+                             ssh_host,
+                             ssh_port,
+                             ssh_user,
+                             ssh_remote_bind_address,
+                             ssh_remote_bind_port,
+                             ssh_local_bind_address,
+                             ssh_local_bind_port,
+                             db_name,
+                             db_user,
+                             db_password,
+                             db_schema,
+                             db_host)
+
+        def get_sql_list_dicts(self, sql, params=None):
+            val = [{'column_name': 'id', 'data_type': 'integer'},
+                   {'column_name': 'color_name', 'data_type': 'an unknown dtype'},  # This is the bad dtype
+                   {'column_name': 'another_value', 'data_type': 'character varying'},
+                   {'column_name': 'an_int', 'data_type': 'integer'}, {'column_name': 'a_date', 'data_type': 'date'},
+                   {'column_name': 'a_timestamp', 'data_type': 'timestamp without time zone'},
+                   {'column_name': 'a_number', 'data_type': 'numeric'},
+                   {'column_name': 'a_big_int', 'data_type': 'bigint'},
+                   {'column_name': 'a_small_int', 'data_type': 'smallint'}]
+            return val

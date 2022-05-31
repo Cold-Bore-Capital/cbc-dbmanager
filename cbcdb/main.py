@@ -2,7 +2,7 @@ import random
 import socket
 import time
 from datetime import datetime, date
-from typing import List, Any, Dict, Tuple
+from typing import List, Any, Dict, Tuple, Union
 
 import pandas as pd
 from configservice.config import Config
@@ -21,7 +21,7 @@ class DBManager:
     """
 
     def __init__(self,
-                 use_aws_secrets=True,
+                 use_aws_secrets=False,
                  profile_name=None,
                  secret_name=None,
                  region_name=None,
@@ -650,6 +650,49 @@ class DBManager:
                 # If Bool, convert to a 1 or 0 for consistency.
                 val = 1 if val else 0
             return f"{col}={val}{sep} "
+
+    @staticmethod
+    def remove_duplicates(schema: str, table_name: str, key_column: str, duplicate_cols: Union[list,str],
+                          order_by_cols: Union[list,str]) -> str:
+        """
+        Removes duplicate records from the specified table.
+
+
+        Args:
+            schema: The schema for the table to replace values in
+            table_name: Table name to replace values in
+            key_column: Unique id column.
+            duplicate_cols:  A list of column or column's used as a unique identifier to remove duplicate data in relational db.
+            order_by_cols:  A list of column or column's  used for sorting the data
+
+        Returns:
+            sql: sql query
+        """
+        if isinstance(duplicate_cols,list):
+            duplicate_col_str = ', '.join(duplicate_cols)
+        else:
+            duplicate_col_str = duplicate_cols
+
+        if order_by_cols :
+            if isinstance(order_by_cols,list):
+                order_by_str = ', '.join(order_by_cols)
+            else:
+                order_by_str = order_by_cols
+        else:
+            order_by_str = key_column
+
+        sql = f'''delete
+            from {schema}.{table_name}
+            where {key_column} in (
+                                    select {key_column}
+                                    from (
+                                            select {key_column}
+                                                    , row_number() over(partition by {duplicate_col_str} order by {order_by_str} ) as row_count
+                                            from {schema}.{table_name}
+                                            ) sq
+                                  where sq.row_count > 1)'''
+
+        return sql
 
 
 class MissingDatabaseColumn(Exception):
