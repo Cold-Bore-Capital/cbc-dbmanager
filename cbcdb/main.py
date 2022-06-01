@@ -74,11 +74,13 @@ class DBManager:
 
         self._config = Config(profile_name=profile_name,
                               secret_name=secret_name,
+                              aws_secrets=use_aws_secrets,
                               aws_cache=aws_cache,
                               region_name=region_name,
                               test_mode=test_mode)
         if use_aws_secrets:
-            self._config.get_all_secrets()
+            if aws_cache:
+                self._config.get_all_secrets()
 
             self._debug_mode = debug_output_mode
             self._db_host = db_host if db_host else self._config.get_secret('DB_HOST')
