@@ -75,7 +75,6 @@ class DBManager:
         self._config = Config(profile_name=profile_name,
                               secret_name=secret_name,
                               aws_secrets=use_aws_secrets,
-                              aws_cache=aws_cache,
                               region_name=region_name,
                               test_mode=test_mode)
         if use_aws_secrets:
