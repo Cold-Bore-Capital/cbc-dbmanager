@@ -1,5 +1,5 @@
 psycopg2-binary>=2.8
 sshtunnel>=0.4.0
 pandas>=1.1
-configservice==0.0.19
+configservice>=0.0.22
 boto3>=1.17
