@@ -32,7 +32,6 @@ class DBManager:
                  ssh_host=None,
                  ssh_port=None,
                  ssh_user=None,
-                 ssh_remote_bind_address=None,
                  ssh_remote_bind_port=None,
                  ssh_local_bind_address=None,
                  ssh_local_bind_port=None,
@@ -78,9 +77,6 @@ class DBManager:
                               region_name=region_name,
                               test_mode=test_mode)
         if use_aws_secrets:
-            if aws_cache:
-                self._config.get_all_secrets()
-
             self._debug_mode = debug_output_mode
             self._db_host = db_host if db_host else self._config.get_secret('DB_HOST')
             self._db_name = db_name if db_name else self._config.get_secret('DB_NAME')
@@ -95,7 +91,7 @@ class DBManager:
             else:
                 self._db_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.get_secret('DB_PORT',
                                                                                                          data_type_convert='int')
-            self.use_ssh = use_ssh if use_ssh else self._config.get_env('USE_SSH', data_type_convert='bool')
+            self.use_ssh = use_ssh if use_ssh else self._config.get_secret('USE_SSH', data_type_convert='bool')
             if self.use_ssh:
                 self.ssh_host = ssh_host if ssh_host else self._config.get_secret('SSH_HOST')
                 self.ssh_port = ssh_port if ssh_port else self._config.get_secret('SSH_PORT', data_type_convert='int')
