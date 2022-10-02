@@ -6,11 +6,9 @@ from typing import List, Any, Dict, Tuple
 
 import pandas as pd
 from configservice.config import Config
-from dotenv import load_dotenv
 from numpy import inf
 from psycopg2 import connect
 from psycopg2.extras import execute_values
-from sshtunnel import open_tunnel, create_logger
 
 
 class DBManager:
@@ -27,38 +25,18 @@ class DBManager:
                  region_name=None,
                  aws_cache=None,
                  debug_output_mode=None,
-                 use_ssh=False,
-                 ssh_key_path=None,
-                 ssh_host=None,
-                 ssh_port=None,
-                 ssh_user=None,
-                 ssh_remote_bind_port=None,
-                 ssh_local_bind_address=None,
-                 ssh_local_bind_port=None,
                  db_name=None,
                  db_user=None,
                  db_password=None,
                  db_schema=None,
                  db_host=None,
                  db_port=None,
-                 test_mode=False,
-                 dotenv_load=False):
+                 test_mode=False):
         """
         Init Function
 
         Args:
             debug_output_mode: Flag to turn on debug mode. Setting this to True will print debug messages.
-            use_ssh: A flag to indicate if SSH should be used for the connection. If set to True, database connection
-                     will be made through an SSH tunnel.
-            ssh_key_path: A path to the SSH key on the local computer or container disk.
-            ssh_host: The host for the SSH tunnel.
-            ssh_port:
-            ssh_user:
-            ssh_remote_bind_address:
-            ssh_remote_bind_port:
-            ssh_local_bind_address:
-            ssh_local_bind_port: In the .env file you can either set an integer, or use the word "random" to allow the
-                                 system to select a random port.
             db_name:
             db_user:
             db_password:
@@ -66,17 +44,16 @@ class DBManager:
             db_host:
             db_port:
             test_mode:
-            dotenv_load:
         """
-        if dotenv_load:
-            load_dotenv()
-
         self._config = Config(profile_name=profile_name,
                               secret_name=secret_name,
                               aws_secrets=use_aws_secrets,
                               region_name=region_name,
                               test_mode=test_mode)
         if use_aws_secrets:
+            if aws_cache:
+                self._config.get_all_secrets()
+
             self._debug_mode = debug_output_mode
             self._db_host = db_host if db_host else self._config.get_secret('DB_HOST')
             self._db_name = db_name if db_name else self._config.get_secret('DB_NAME')
@@ -86,23 +63,9 @@ class DBManager:
             # Publicly accessible schema
             self.db_schema = self._db_schema
             if db_port:
-                self._db_port = db_port if db_port else self._config.get_secret('DB_PORT',
-                                                                                data_type_convert='int')
+                self._db_port = db_port if db_port else self._config.get_secret('DB_PORT', data_type_convert='int')
             else:
-                self._db_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.get_secret('DB_PORT',
-                                                                                                         data_type_convert='int')
-            self.use_ssh = use_ssh if use_ssh else self._config.get_secret('USE_SSH', data_type_convert='bool')
-            if self.use_ssh:
-                self.ssh_host = ssh_host if ssh_host else self._config.get_secret('SSH_HOST')
-                self.ssh_port = ssh_port if ssh_port else self._config.get_secret('SSH_PORT', data_type_convert='int')
-                self.ssh_user = ssh_user if ssh_user else self._config.get_secret('SSH_USER')
-                self.ssh_key_path = ssh_key_path if ssh_key_path else self._config.get_secret('SSH_KEY_PATH')
-                self.db_port = ssh_remote_bind_port if ssh_local_bind_port else self._config.get_secret('DB_PORT',
-                                                                                                        data_type_convert='int')
-                self.ssh_local_bind_address = ssh_local_bind_address if ssh_local_bind_address else self._config.get_secret(
-                    'SSH_LOCAL_BIND_ADDRESS')
-                self.ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.get_secret(
-                    'SSH_LOCAL_BIND_PORT', data_type_convert='int')
+                self._db_port = self._config.get_secret('DB_PORT', data_type_convert='int')
 
             self._page_size = None
         else:
@@ -116,22 +79,10 @@ class DBManager:
             self._db_schema = db_schema if db_schema else self._config.get_env('DB_SCHEMA')
             # Publicly accessible schema
             self.db_schema = self._db_schema
-            self.use_ssh = use_ssh if use_ssh else self._config.get_env('USE_SSH', data_type_convert='bool')
             if db_port:
-                self._db_port = db_port if db_port else self._config.get_env('DB_PORT',
-                                                                             data_type_convert='bool')
+                self._db_port = db_port if db_port else self._config.get_env('DB_PORT', data_type_convert='bool')
             else:
-                self._db_port = ssh_remote_bind_port if ssh_remote_bind_port else self._config.get_env('DB_PORT',
-                                                                                                       data_type_convert='bool')
-            if self.use_ssh:
-                self.ssh_host = ssh_host if ssh_host else self._config.get_env('SSH_HOST')
-                self.ssh_port = ssh_port if ssh_port else self._config.get_env('SSH_PORT')
-
-                self.ssh_user = ssh_user if ssh_user else self._config.get_env('SSH_USER')
-                self.ssh_key_path = ssh_key_path if ssh_key_path else self._config.get_env('SSH_KEY_PATH')
-                self.ssh_local_bind_address = ssh_local_bind_address if ssh_local_bind_address else self._config.ssh_local_bind_port
-                self.ssh_local_bind_port = ssh_local_bind_port if ssh_local_bind_port else self._config.get_env(
-                    'SSH_LOCAL_BIND_PORT')
+                self._db_port = self._config.get_env('DB_PORT', data_type_convert='bool')
 
             self._page_size = None
 
@@ -175,23 +126,9 @@ class DBManager:
 
         Returns: The results of the original method instance.
         """
-        if self.use_ssh:
-            with open_tunnel(
-                    (self.ssh_host, self.ssh_port),
-                    ssh_username=self.ssh_user,
-                    ssh_pkey=self.ssh_key_path,
-                    remote_bind_address=(self._db_host, self.db_port),
-                    local_bind_address=(self.ssh_local_bind_address, self.ssh_local_bind_port)) as tunnel:
-                if self._config.get_secret('SSH_LOGGING_LEVEL', 'bool'):
-                    tunnel.logger = create_logger(loglevel=self._config.ssh_logging_level)
-                host = tunnel.local_bind_host
-                port = tunnel.local_bind_port
-                return self._database_connection_sub_method(host, port, method_instance, sql, params)
-
-        else:
-            host = self._db_host
-            port = self._db_port
-            return self._database_connection_sub_method(host, port, method_instance, sql, params)
+        host = self._db_host
+        port = self._db_port
+        return self._database_connection_sub_method(host, port, method_instance, sql, params)
 
     def _database_connection_sub_method(self, host, port, method_instance, sql, params):
         with connect(dbname=self._db_name,
@@ -572,6 +509,19 @@ class DBManager:
         # This returns a list of arrays. Need to convert to list of lists.
         params = [list(x) for x in vals]
         return sql, params
+
+    def save_dataframe(self, df: pd.DataFrame, table_name: str, schema: str) -> None:
+        """
+        Saves a dataframe to a table in redshift/postgres.
+        Args:
+            df: DataFrame to use for SQL call
+            table_name: Name of the target table
+            schema: Name of the target schema.
+        Returns:
+            None
+        """
+        sql, params = self.build_sql_from_dataframe(df, table_name, schema)
+        self.insert_many(sql, params)
 
     @staticmethod
     def convert_nan_to_none(params: List[Any]) -> List[Any]:
