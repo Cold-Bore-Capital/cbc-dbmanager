@@ -4,7 +4,6 @@ import time
 from datetime import datetime, date
 from typing import List, Any, Dict, Tuple
 
-import pandas as pd
 from configservice.config import Config
 from numpy import inf
 from psycopg2 import connect
@@ -153,6 +152,7 @@ class DBManager:
         Returns: A Pandas DataFrame.
 
         """
+        import pandas as pd
         if conn:
             self._print_debug_output(f"Getting query:\n {sql}")
             if params:
@@ -338,6 +338,7 @@ class DBManager:
         Returns:
             None
         """
+        import pandas as pd
         df_ = df[update_cols + static_cols].drop_duplicates()
         df_ = df_.where(pd.notnull(df_), None)
         updated_statements = []
@@ -501,6 +502,7 @@ class DBManager:
             A sql string template for the insert statement.
             A list of params
         """
+        import pandas as pd
         columns = list(df.columns)
         columns_str = self.make_column_names(columns)
         schema = f'{schema}.' if schema else ''
@@ -535,6 +537,7 @@ class DBManager:
 
         Returns: A list of parameters with pd.nan's converted to None
         """
+        import pandas as pd
         row_counter = 0
         for row in params:
             value_counter = 0
@@ -574,6 +577,7 @@ class DBManager:
                 3. Set portion string type value "col = 'val' and"
                 4. Set portion numeric or bool value "col = val and"
         """
+        import pandas as pd
         if pd.isnull(val):
             return f"{col}=null{sep} "
         if quote_flag_dict[col]:
