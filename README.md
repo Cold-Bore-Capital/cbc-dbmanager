@@ -1,6 +1,8 @@
 # cbc_redshift_db_connect
 
-
+## Note About Pandas
+To keep package size down, Pandas has been removed from the requirements.txt file. If you need to use Pandas, you will
+need to install it manually. Pandas now imports at the function level instead of the module level. 
 
 
 ## .env Setup for testing
