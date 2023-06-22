@@ -138,7 +138,7 @@ class DBManager:
             with conn.cursor() as curs:
                 return method_instance(sql, params, curs, conn)
 
-    def get_sql_dataframe(self, sql: str, params: list = None, curs=False, conn=False) -> pd.DataFrame:
+    def get_sql_dataframe(self, sql: str, params: list = None, curs=False, conn=False):
         """
          Returns a DataFrame for a given SQL query
 
