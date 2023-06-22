@@ -323,7 +323,7 @@ class DBManager:
         else:
             self._get_connection(sql, params, self.insert_many)
 
-    def update_batch_from_df(self, df: pd.DataFrame, update_cols: list, static_cols: list, schema: str,
+    def update_batch_from_df(self, df, update_cols: list, static_cols: list, schema: str,
                              table: str) -> None:
         """
         Generates and executes an update from a dataframe.
@@ -488,7 +488,7 @@ class DBManager:
         print('make_variable_replacements has been depreciated and will be removed in a future version.')
         return self.make_param_string(input_list)
 
-    def build_sql_from_dataframe(self, df: pd.DataFrame, table_name: str, schema: str) -> Tuple[str, list]:
+    def build_sql_from_dataframe(self, df, table_name: str, schema: str) -> Tuple[str, list]:
         """
         Builds a SQL string and params from dataframe
         This method will return a string SQL call and a list of params. The column names of the
@@ -512,7 +512,7 @@ class DBManager:
         params = [list(x) for x in vals]
         return sql, params
 
-    def save_dataframe(self, df: pd.DataFrame, table_name: str, schema: str) -> None:
+    def save_dataframe(self, df, table_name: str, schema: str) -> None:
         """
         Saves a dataframe to a table in redshift/postgres.
         Args:
