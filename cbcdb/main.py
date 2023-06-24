@@ -5,7 +5,6 @@ from datetime import datetime, date
 from typing import List, Any, Dict, Tuple
 
 from configservice.config import Config
-from numpy import inf
 from psycopg2 import connect
 from psycopg2.extras import execute_values
 
@@ -538,6 +537,7 @@ class DBManager:
         Returns: A list of parameters with pd.nan's converted to None
         """
         import pandas as pd
+        from numpy import inf
         row_counter = 0
         for row in params:
             value_counter = 0
